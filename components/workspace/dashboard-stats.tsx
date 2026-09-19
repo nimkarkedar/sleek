@@ -1,5 +1,6 @@
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
+import { createRng, formatMoney, randomInt } from '@/lib/seeded-random';
 import { TONE_BADGE_CLASS, type Tone } from '@/lib/tone';
 import { cn } from '@/lib/utils';
 import {
@@ -30,41 +31,56 @@ type StatCard = {
   trend?: Trend;
 };
 
-const STATS: StatCard[] = [
-  {
-    key: 'revenue',
-    label: 'Revenue',
-    value: '25,760.02',
-    unit: 'SGD',
-    icon: Banknote,
-    tone: 'neutral',
-    trend: { direction: 'up', percent: 78, caption: 'higher than last month' },
-  },
-  {
-    key: 'expenses',
-    label: 'Expenses',
-    value: '25,760.02',
-    unit: 'SGD',
-    icon: ArrowUp,
-    tone: 'destructive',
-  },
-  {
-    key: 'to-get',
-    label: 'To Get',
-    value: '0',
-    unit: 'SGD',
-    icon: ArrowDownLeft,
-    tone: 'success',
-  },
-  {
-    key: 'to-pay',
-    label: 'To Pay',
-    value: '0',
-    unit: 'SGD',
-    icon: ArrowUpRight,
-    tone: 'destructive',
-  },
-];
+/** Seeded per company so switching the workspace selector shows different-looking figures, but
+ * the same company always shows the same numbers rather than reshuffling on every render. */
+function buildStats(companyId: string): StatCard[] {
+  const rng = createRng(`${companyId}:dashboard-stats`);
+  const revenue = randomInt(rng, 8000, 60000) + rng();
+  const expenses = randomInt(rng, 5000, 40000) + rng();
+  const toGet = rng() < 0.2 ? 0 : randomInt(rng, 200, 6000) + rng();
+  const toPay = rng() < 0.2 ? 0 : randomInt(rng, 200, 6000) + rng();
+  const trendDirection: Trend['direction'] = rng() < 0.5 ? 'up' : 'down';
+
+  return [
+    {
+      key: 'revenue',
+      label: 'Revenue',
+      value: formatMoney(revenue),
+      unit: 'SGD',
+      icon: Banknote,
+      tone: 'neutral',
+      trend: {
+        direction: trendDirection,
+        percent: randomInt(rng, 1, 99),
+        caption: trendDirection === 'up' ? 'higher than last month' : 'lower than last month',
+      },
+    },
+    {
+      key: 'expenses',
+      label: 'Expenses',
+      value: formatMoney(expenses),
+      unit: 'SGD',
+      icon: ArrowUp,
+      tone: 'destructive',
+    },
+    {
+      key: 'to-get',
+      label: 'To Get',
+      value: formatMoney(toGet),
+      unit: 'SGD',
+      icon: ArrowDownLeft,
+      tone: 'success',
+    },
+    {
+      key: 'to-pay',
+      label: 'To Pay',
+      value: formatMoney(toPay),
+      unit: 'SGD',
+      icon: ArrowUpRight,
+      tone: 'destructive',
+    },
+  ];
+}
 
 /** 'up' reads as a positive change (green), 'down' as negative (red) — matches the arrow direction. */
 const TREND_TEXT_CLASS: Record<Trend['direction'], string> = {
@@ -115,7 +131,9 @@ function StatCardBody({ stat }: { stat: StatCard }) {
 const CARD_CLASS =
   'gap-2.5 rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-sm shadow-black/5';
 
-export function DashboardStats() {
+export function DashboardStats({ companyId }: { companyId: string }) {
+  const stats = React.useMemo(() => buildStats(companyId), [companyId]);
+
   return (
     <>
       {/* Mobile: horizontal scroll — 4 cards don't fit a phone width, so let them scroll
@@ -124,18 +142,18 @@ export function DashboardStats() {
         horizontal
         showsHorizontalScrollIndicator={false}
         className="md:hidden"
-        contentContainerClassName="gap-4 pr-5">
-        {STATS.map((stat) => (
-          <View key={stat.key} className={cn(CARD_CLASS, 'w-[190px]')}>
+        contentContainerClassName="gap-5 pr-6">
+        {stats.map((stat) => (
+          <View key={stat.key} className={cn(CARD_CLASS, 'w-[200px]')}>
             <StatCardBody stat={stat} />
           </View>
         ))}
       </ScrollView>
 
       {/* Desktop: locked, unchanged — even 4-across row. */}
-      <View className="hidden flex-row flex-wrap gap-4 md:flex">
-        {STATS.map((stat) => (
-          <View key={stat.key} className={cn(CARD_CLASS, 'min-w-[220px] flex-1')}>
+      <View className="hidden flex-row gap-4 md:flex">
+        {stats.map((stat) => (
+          <View key={stat.key} className={cn(CARD_CLASS, 'min-w-[180px] flex-1')}>
             <StatCardBody stat={stat} />
           </View>
         ))}

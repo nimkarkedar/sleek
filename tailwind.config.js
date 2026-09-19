@@ -7,12 +7,21 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
+      // Segoe UI is a proprietary Microsoft font — there's no legal webfont file to bundle, so
+      // each weight is a named alias (declared in app/+html.tsx) that resolves to the real
+      // system "Segoe UI" on Windows and falls back to each OS's native UI font elsewhere.
       fontFamily: {
-        sans: ['IBMPlexSans_400Regular'],
-        'plex-regular': ['IBMPlexSans_400Regular'],
-        'plex-medium': ['IBMPlexSans_500Medium'],
-        'plex-semibold': ['IBMPlexSans_600SemiBold'],
-        'plex-bold': ['IBMPlexSans_700Bold'],
+        sans: ['SegoeUI-Regular', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-regular': ['SegoeUI-Regular', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-medium': ['SegoeUI-Medium', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-semibold': [
+          'SegoeUI-SemiBold',
+          'Segoe UI',
+          'system-ui',
+          '-apple-system',
+          'sans-serif',
+        ],
+        'plex-bold': ['SegoeUI-Bold', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',

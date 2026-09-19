@@ -10,7 +10,7 @@ export default function LoginScreen() {
         <Pressable
           className="min-h-[220px] flex-1 items-center justify-center bg-[#FAFAFA] web:cursor-pointer web:hover:bg-[#F5F5F5] active:bg-[#F0F0F1]"
           accessibilityRole="link">
-          <View className="min-w-[280px] rounded-2xl bg-[#F4F4F5] px-9 py-7 shadow-sm">
+          <View className="min-w-[280px] rounded-2xl bg-[#F4F4F5] px-10 py-8 shadow-sm">
             <Text className="mb-1.5 text-2xl font-plex-bold tracking-tight text-[#18181B]">
               Login as a Company
             </Text>
@@ -23,7 +23,7 @@ export default function LoginScreen() {
         <Pressable
           className="min-h-[220px] flex-1 items-center justify-center bg-brand web:cursor-pointer web:hover:bg-brand-hover active:bg-brand-hover"
           accessibilityRole="link">
-          <View className="min-w-[280px] rounded-2xl bg-white px-9 py-7 shadow-lg">
+          <View className="min-w-[280px] rounded-2xl bg-white px-10 py-8 shadow-lg">
             <Text className="mb-1.5 text-2xl font-plex-bold tracking-tight text-[#18181B]">
               Login as a Sleek
             </Text>

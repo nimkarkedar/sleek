@@ -5,11 +5,15 @@ type NavIconProps = {
   d: string;
   size?: number;
   color?: string;
+  /** Solid version for the active nav item — these are hand-drawn outline paths (not a
+   * separate outline/filled glyph pair), so "filled" is approximated by filling the same
+   * path rather than swapping in different artwork. */
+  filled?: boolean;
 };
 
-function NavIcon({ d, size = 18, color = 'currentColor' }: NavIconProps) {
+function NavIcon({ d, size = 18, color = 'currentColor', filled = false }: NavIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'}>
       <Path
         d={d}
         stroke={color}
@@ -48,10 +52,12 @@ export function NavigationIcon({
   name,
   size,
   color,
+  filled,
 }: {
   name: NavIconName;
   size?: number;
   color?: string;
+  filled?: boolean;
 }) {
-  return <NavIcon d={NAV_ICON_PATHS[name]} size={size} color={color} />;
+  return <NavIcon d={NAV_ICON_PATHS[name]} size={size} color={color} filled={filled} />;
 }

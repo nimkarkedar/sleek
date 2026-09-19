@@ -1,7 +1,8 @@
 import * as React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-/** "Sleek" wordmark used for the "Powered by Sleek" footer badge. Ported from Sleek.svg. */
+/** "Sleek" wordmark — two-tone (dark + brand blue), designed for a light background. The
+ * shell's primary brand mark for both personas. Ported from Sleek.svg. */
 export function SleekLogo({ height = 13 }: { height?: number }) {
   const width = (height * 43) / 17;
   return (

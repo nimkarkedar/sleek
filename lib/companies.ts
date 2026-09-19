@@ -33,6 +33,14 @@ export const COMPANIES: Company[] = [
   { id: 'serangoon', name: 'Serangoon Design Studio', initial: 'S', logoColor: null, lastVisitedDaysAgo: 34, workQueueCount: 8 },
 ];
 
+/** A client's own company (no rollup — Client always operates within exactly one company).
+ * Accountants pick from the full `COMPANIES` roster instead, plus an "all-clients" scope. */
+export const CLIENT_COMPANIES: Company[] = [COMPANIES[0]];
+
+/** What workspace is currently in view. A specific company (either persona), or — Accountant
+ * only — the portfolio-wide "all clients" scope, where company-specific nav/content don't apply. */
+export type Scope = { kind: 'company'; companyId: string } | { kind: 'all-clients' };
+
 export function formatLastVisited(daysAgo: number): string {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
