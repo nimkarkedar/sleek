@@ -1,5 +1,9 @@
 name: Deploy to GitHub Pages
 
+# Publishes two variants side by side: /sleek/v1 is a frozen snapshot of the pre-redesign shell
+# (pinned to the v1-snapshot tag, never moves), /sleek/v2 tracks main (the current work). Bump
+# v1-snapshot to a newer commit only when you want a new frozen baseline.
+
 on:
   push:
     branches: [main]
@@ -18,23 +22,63 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout v1 (frozen snapshot)
+        uses: actions/checkout@v4
+        with:
+          ref: v1-snapshot
+          path: v1-src
+
+      - name: Checkout v2 (current)
+        uses: actions/checkout@v4
+        with:
+          path: v2-src
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install v1 dependencies
+        working-directory: v1-src
         run: npm ci
 
-      - name: Export static web build
+      - name: Export v1 static web build
+        working-directory: v1-src
         run: npx expo export --platform web
         env:
-          GH_PAGES_BASE_PATH: /${{ github.event.repository.name }}
+          GH_PAGES_BASE_PATH: /${{ github.event.repository.name }}/v1
+
+      - name: Install v2 dependencies
+        working-directory: v2-src
+        run: npm ci
+
+      - name: Export v2 static web build
+        working-directory: v2-src
+        run: npx expo export --platform web
+        env:
+          GH_PAGES_BASE_PATH: /${{ github.event.repository.name }}/v2
+
+      - name: Assemble combined site
+        run: |
+          mkdir -p site
+          cp -r v1-src/dist site/v1
+          cp -r v2-src/dist site/v2
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>Sleek</title>
+            </head>
+            <body>
+              <p><a href="./v1/">v1</a></p>
+              <p><a href="./v2/">v2</a></p>
+            </body>
+          </html>
+          HTML
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
     needs: build
