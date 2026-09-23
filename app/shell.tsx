@@ -1,6 +1,19 @@
+import {
+  complianceStatusFromDueInDays,
+  ComplianceStatusButton,
+} from '@/components/workspace/compliance-status';
 import { DashboardStats } from '@/components/workspace/dashboard-stats';
-import { DEFAULT_PERIOD, PeriodSelector, type Period } from '@/components/workspace/period-selector';
-import { WorkList } from '@/components/workspace/work-list';
+import {
+  DEFAULT_PERIOD,
+  periodTriggerLabel,
+  PeriodSelector,
+  type Period,
+} from '@/components/workspace/period-selector';
+import {
+  getMostUrgentDueInDays,
+  getWorkQueueTotal,
+  WorkList,
+} from '@/components/workspace/work-list';
 import { CompanyAvatar, WorkspaceSelector } from '@/components/workspace/workspace-selector';
 import { Chevron, NavigationIcon, type NavIconName } from '@/components/icons/nav-icons';
 import { Icon } from '@/components/ui/icon';
@@ -59,8 +72,14 @@ export default function AppShellScreen() {
   const activeLabel = nav.find((n) => n.key === active)?.label ?? 'Dashboard';
   const selectedCompany =
     scope.kind === 'company' ? (COMPANIES.find((c) => c.id === scope.companyId) ?? COMPANIES[0]) : undefined;
+  // Derived from the exact same numbers the Work list itself shows (see getWorkQueueTotal) —
+  // this used to be an independent hardcoded figure per company that had no relationship to the
+  // list's own counts, so the two never added up.
   const navBadges: Partial<Record<string, number>> | undefined =
-    selectedCompany && isAcct ? { work: selectedCompany.workQueueCount } : undefined;
+    selectedCompany && isAcct ? { work: getWorkQueueTotal(selectedCompany) } : undefined;
+  const complianceStatus = selectedCompany
+    ? complianceStatusFromDueInDays(getMostUrgentDueInDays(selectedCompany))
+    : undefined;
 
   function selectNav(key: string) {
     setActive(key);
@@ -179,21 +198,39 @@ export default function AppShellScreen() {
                 required so the card is actually occluded once it scrolls behind this. */}
             <View
               style={{ position: 'sticky', top: 0, zIndex: 10 } as ViewStyle}
-              className="w-full bg-[#F4F5FA] px-6 pb-3 pt-2 md:px-8 md:pb-3 md:pt-1">
-              <Text style={TITLE_STYLE} className={TITLE_CLASS}>
-                {activeLabel}
-              </Text>
+              className="w-full bg-[#F4F5FA]">
+              {/* Same max-w-[1280px] cap as the content wrapper right below, with a matching
+                  right inset (md:pr-4 mirrors the wrapper's own md:p-4) — so on wide viewports,
+                  where the white card doesn't stretch to the screen edge, this row's right-hand
+                  content lines up with the card's actual right edge instead of drifting out to
+                  the true viewport edge past it. */}
+              <View className="w-full max-w-[1280px] flex-row items-center justify-between px-6 pb-3 pt-2 md:pb-3 md:pl-8 md:pr-4 md:pt-1">
+                <Text style={TITLE_STYLE} className={TITLE_CLASS}>
+                  {activeLabel}
+                </Text>
+                {/* Dashboard only, same as the stats/to-do content below — compliance status is a
+                    company-scoped concept, meaningless at the all-clients portfolio scope. */}
+                {active === 'home' && complianceStatus && selectedCompany && (
+                  <ComplianceStatusButton status={complianceStatus} company={selectedCompany} />
+                )}
+              </View>
             </View>
-            <View className="w-full max-w-[1280px] p-3 md:p-4">
+            <View className="w-full max-w-[1280px] p-0 md:p-4">
               {/* The white "foreground" card — everything else (nav, header) sits on the gray
                   canvas; this is the one surface that pops forward, giving the page a layered
-                  look instead of one flat plane. */}
-              <View className="gap-7 rounded-3xl border border-[#E4E4E7] bg-white p-6 shadow-sm shadow-black/5 md:p-8">
+                  look instead of one flat plane. Mobile drops the card chrome (rounding, border,
+                  shadow, outer inset) entirely and just runs the white content flush edge to
+                  edge — the floating-card look only reads as intentional when there's enough
+                  width to show the gray margin around it; on a phone it was just eating space. */}
+              <View className="gap-7 bg-white p-6 md:rounded-3xl md:border md:border-[#E4E4E7] md:p-8 md:shadow-sm md:shadow-black/5">
                 {/* Dashboard is the only page with real content right now — Work Queue, Clients,
                     and the all-clients portfolio views are all empty on purpose, awaiting design. */}
                 {active === 'home' && selectedCompany && (
                   <>
-                    <DashboardStats companyId={selectedCompany.id} />
+                    <DashboardStats
+                      companyId={selectedCompany.id}
+                      periodLabel={periodTriggerLabel(period)}
+                    />
                     {isAcct && (
                       <WorkList
                         role={role}

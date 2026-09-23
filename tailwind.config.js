@@ -7,21 +7,15 @@ module.exports = {
   presets: [require('nativewind/preset')],
   theme: {
     extend: {
-      // Segoe UI is a proprietary Microsoft font — there's no legal webfont file to bundle, so
-      // each weight is a named alias (declared in app/+html.tsx) that resolves to the real
-      // system "Segoe UI" on Windows and falls back to each OS's native UI font elsewhere.
+      // Geist (Google Fonts), loaded via @expo-google-fonts/geist + useFonts in app/_layout.tsx —
+      // each weight registers under its own family name (e.g. "Geist_400Regular"), same pattern
+      // this project used for IBM Plex Sans before the brief Segoe UI system-font detour.
       fontFamily: {
-        sans: ['SegoeUI-Regular', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
-        'plex-regular': ['SegoeUI-Regular', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
-        'plex-medium': ['SegoeUI-Medium', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
-        'plex-semibold': [
-          'SegoeUI-SemiBold',
-          'Segoe UI',
-          'system-ui',
-          '-apple-system',
-          'sans-serif',
-        ],
-        'plex-bold': ['SegoeUI-Bold', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Geist_400Regular', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-regular': ['Geist_400Regular', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-medium': ['Geist_500Medium', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-semibold': ['Geist_600SemiBold', 'system-ui', '-apple-system', 'sans-serif'],
+        'plex-bold': ['Geist_700Bold', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',

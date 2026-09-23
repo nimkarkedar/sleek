@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { type Company } from '@/lib/companies';
 import { createRng, randomInt } from '@/lib/seeded-random';
-import { TONE_BADGE_CLASS, TONE_HEX, type Tone } from '@/lib/tone';
+import { TONE_BADGE_CLASS, TONE_HEX } from '@/lib/tone';
 import { cn } from '@/lib/utils';
 import {
   ArrowLeftRight,
@@ -28,13 +28,15 @@ import Animated, {
  *  - 'queue': an aggregate count of pending items (transactions, documents). These can't be
  *    checked off with a single tap — the count changes as new items arrive, and "done" means
  *    working through each one, not toggling a box. Shown with a domain icon + a CTA that jumps
- *    into the relevant queue.
+ *    into the relevant queue. All queue icons share one neutral color — the color used to vary
+ *    per item with no real meaning behind which item got red vs green, which read as arbitrary.
  *  - 'task': a genuine one-off action (send this report). These get a real checkbox, since
  *    marking it done is exactly what completing the task means — this is the actual
  *    "close it out" loop we want the accountant forming a habit around.
  *
- * `highlight` marks the one item that should always catch the eye (e.g. the most urgent queue)
- * — gets a pulsing ring on its icon plus a faint persistent tint on the row.
+ * `dueInDays` (0 = today, negative = overdue) drives both the sort order (most urgent first)
+ * and the row's urgency styling — red, in this list, means exactly one thing: due today or
+ * overdue. Nothing else on the row uses red.
  *
  * `clientVisible` (default true) — Work is the same company's workspace for both personas, but
  * a couple of items are professional bookkeeping tasks the accountant does *for* the client
@@ -46,12 +48,11 @@ type TodoItem =
       id: string;
       kind: 'queue';
       icon: LucideIcon;
-      tone: Tone;
       title: string;
       subtitle: string;
       ctaLabel: string;
       targetKey: string;
-      highlight?: boolean;
+      dueInDays: number;
       clientVisible?: boolean;
     }
   | {
@@ -61,45 +62,72 @@ type TodoItem =
       subtitle: string;
       ctaLabel: string;
       targetKey: string;
-      highlight?: boolean;
+      dueInDays: number;
       clientVisible?: boolean;
     };
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+/** Seeded per company — deterministic per item, not just per company, so adding/reordering
+ * fields doesn't shuffle every other item's numbers. */
+function itemRng(company: Company, itemId: string): () => number {
+  return createRng(`${company.id}:todos:${itemId}`);
+}
+
+/** -3..+7 — skewed toward "soon," since everything in this list is still open. Exported so the
+ * Work Queue nav badge can be built from the exact same counts shown here instead of drifting
+ * out of sync with its own separate number. */
+export function computeTodoCounts(company: Company) {
+  return {
+    pendingTransactions: randomInt(itemRng(company, 'pending-transactions'), 1, 40),
+    documents: randomInt(itemRng(company, 'documents-to-upload'), 1, 20),
+    approvals: randomInt(itemRng(company, 'approval-requests'), 1, 10),
+    flags: randomInt(itemRng(company, 'review-flags'), 1, 6),
+  };
+}
+
+/** The Work Queue nav badge — sum of every countable item in this list, so it can never show a
+ * number the list itself doesn't add up to. */
+export function getWorkQueueTotal(company: Company): number {
+  const counts = computeTodoCounts(company);
+  return counts.pendingTransactions + counts.documents + counts.approvals + counts.flags;
+}
 
 // All CTAs currently point back at Work — there's no deeper per-item destination built yet.
 // Each item carries its own `targetKey` so pointing individual items elsewhere later (Books,
 // Reports, ...) is a one-line data change, not a restructure.
-//
-// Counts/subtitles are seeded per company so switching the workspace selector shows different
-// numbers, but "pending transactions" always stays item #1 and highlighted — per user research,
-// it's the single highest-priority to-do regardless of which client you're looking at.
 function buildTodos(company: Company): TodoItem[] {
-  const rng = createRng(`${company.id}:todos`);
-  const pendingTransactions = randomInt(rng, 1, 40);
-  const documents = randomInt(rng, 1, 20);
-  const approvals = randomInt(rng, 1, 10);
-  const flags = randomInt(rng, 1, 6);
+  const { pendingTransactions, documents, approvals, flags } = computeTodoCounts(company);
+  const due = (id: string) => randomInt(itemRng(company, `${id}:due`), -3, 7);
+
+  // Acme is the company everyone lands on by default (COMPANIES[0]), so it's the one every demo
+  // opens with — worth guaranteeing it actually shows the urgent/red state on the top-priority
+  // item instead of leaving that to chance every time the seed happens to roll something urgent.
+  const pendingTransactionsDue =
+    company.id === 'acme' ? -1 : due('pending-transactions');
 
   return [
     {
       id: 'pending-transactions',
       kind: 'queue',
       icon: ArrowLeftRight,
-      tone: 'destructive',
       title: `${pendingTransactions} pending transactions need your attention`,
       subtitle: 'Review and categorize to keep the books accurate',
       ctaLabel: 'Review',
       targetKey: 'work',
-      highlight: true,
+      dueInDays: pendingTransactionsDue,
     },
     {
       id: 'documents-to-upload',
       kind: 'queue',
       icon: FileText,
-      tone: 'neutral',
       title: `${documents} documents to be uploaded to reconcile transactions`,
       subtitle: 'Missing receipts and invoices for this month',
       ctaLabel: 'Upload',
       targetKey: 'work',
+      dueInDays: due('documents-to-upload'),
     },
     {
       id: 'send-monthly-report',
@@ -108,28 +136,39 @@ function buildTodos(company: Company): TodoItem[] {
       subtitle: `Keeps ${company.name} updated on their financial health`,
       ctaLabel: 'Open',
       targetKey: 'work',
+      dueInDays: due('send-monthly-report'),
       clientVisible: false,
     },
     {
       id: 'approval-requests',
       kind: 'queue',
       icon: ClipboardCheck,
-      tone: 'success',
-      title: `${approvals} approval requests waiting`,
+      title: `${approvals} approval ${pluralize(approvals, 'request')} waiting`,
       subtitle: 'Payment runs held up until you sign off',
       ctaLabel: 'Approve',
       targetKey: 'work',
+      dueInDays: due('approval-requests'),
     },
     {
       id: 'review-flags',
       kind: 'task',
       title: 'Review flagged compliance items',
-      subtitle: `${flags} items flagged during last reconciliation`,
+      subtitle: `${flags} ${pluralize(flags, 'item')} flagged during last reconciliation`,
       ctaLabel: 'Open',
       targetKey: 'work',
+      dueInDays: due('review-flags'),
       clientVisible: false,
     },
   ];
+}
+
+/** Most urgent `dueInDays` across every item in this company's list (across both roles' items —
+ * compliance status is a company-level signal, not scoped to what one persona happens to see).
+ * Drives the compliance-status indicator up in the header, so "pending" there means exactly the
+ * same thing "overdue/due today" means in the list itself, not a second invented signal. */
+export function getMostUrgentDueInDays(company: Company): number {
+  const todos = buildTodos(company);
+  return Math.min(...todos.map((t) => t.dueInDays));
 }
 
 const BADGE_SIZE = 36;
@@ -140,6 +179,19 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function dueLabel(days: number): string {
+  if (days < 0) return `Overdue by ${Math.abs(days)} ${pluralize(Math.abs(days), 'day')}`;
+  if (days === 0) return 'Due today';
+  if (days === 1) return 'Due tomorrow';
+  return `Due in ${days} days`;
+}
+
+/** The one and only meaning red carries in this list — due today or overdue. Nothing else
+ * (item type, category, icon) borrows it. */
+function isUrgent(days: number): boolean {
+  return days <= 0;
 }
 
 /** Soft "live/urgent" ping behind an icon badge — expands and fades, loops forever. Deliberately
@@ -188,13 +240,14 @@ type TodoRowProps = {
 
 function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps) {
   const [hovered, setHovered] = React.useState(false);
+  const urgent = isUrgent(todo.dueInDays);
 
   // Background is driven by inline style, not a Tailwind class — this project's NativeWind
   // setup doesn't reliably compile "compound" utilities (opacity modifiers like `bg-x/5`,
   // arbitrary bracket values) into real CSS, only plain single-token classes. Inline style
   // always works regardless, same fix as the corner-radius issue earlier.
-  const baseBg = todo.highlight ? hexToRgba(TONE_HEX.destructive, 0.05) : 'transparent';
-  const hoverBg = todo.highlight ? hexToRgba(TONE_HEX.destructive, 0.09) : ROW_HOVER_BG;
+  const baseBg = urgent ? hexToRgba(TONE_HEX.destructive, 0.05) : 'transparent';
+  const hoverBg = urgent ? hexToRgba(TONE_HEX.destructive, 0.09) : ROW_HOVER_BG;
 
   return (
     <Pressable
@@ -216,9 +269,7 @@ function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps
       <View className="flex-1 flex-row items-start gap-4">
         {/* Fixed-width, horizontally centered — task rows' 24px checkbox and queue rows' 36px
             badge sit in the same column this way, so the text (and, on mobile, the CTA below
-            it) always starts at the same x regardless of which icon a given row has. Was two
-            differently-sized icons left-aligned against each other, which is what was throwing
-            the text/button alignment off row to row. */}
+            it) always starts at the same x regardless of which icon a given row has. */}
         <View className="w-9 items-center">
           {todo.kind === 'task' ? (
             <Pressable
@@ -234,9 +285,9 @@ function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps
             <View
               className="items-center justify-center"
               style={{ width: BADGE_SIZE, height: BADGE_SIZE }}>
-              {todo.highlight && <PulseRing color={TONE_HEX[todo.tone]} />}
+              {urgent && <PulseRing color={TONE_HEX.destructive} />}
               <View
-                className={`h-9 w-9 items-center justify-center rounded-full ${TONE_BADGE_CLASS[todo.tone]}`}>
+                className={`h-9 w-9 items-center justify-center rounded-full ${TONE_BADGE_CLASS.neutral}`}>
                 <Icon as={todo.icon} size={16} className="text-white" />
               </View>
             </View>
@@ -252,6 +303,13 @@ function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps
             {todo.title}
           </Text>
           <Text className="hidden text-sm text-[#656565] md:flex">{todo.subtitle}</Text>
+          <Text
+            className={cn(
+              'text-xs font-plex-medium',
+              urgent ? 'text-destructive-text' : 'text-[#9A9A9A]'
+            )}>
+            {dueLabel(todo.dueInDays)}
+          </Text>
         </View>
       </View>
 
@@ -295,7 +353,11 @@ export function WorkList({ role, company, onNavigate, showHeading }: WorkListPro
     });
   }
 
-  const visible = todos.filter((todo) => role === 'accountant' || todo.clientVisible !== false);
+  // Most urgent first — otherwise a task due today can end up buried under one due next week
+  // just because of where it happens to sit in the source list.
+  const visible = todos
+    .filter((todo) => role === 'accountant' || todo.clientVisible !== false)
+    .sort((a, b) => a.dueInDays - b.dueInDays);
 
   return (
     <View className="gap-5">
