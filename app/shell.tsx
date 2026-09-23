@@ -208,9 +208,12 @@ export default function AppShellScreen() {
                 <Text style={TITLE_STYLE} className={TITLE_CLASS}>
                   {activeLabel}
                 </Text>
-                {/* Dashboard only, same as the stats/to-do content below — compliance status is a
-                    company-scoped concept, meaningless at the all-clients portfolio scope. */}
-                {active === 'home' && complianceStatus && selectedCompany && (
+                {/* Accountant only — the panel's content (filings, "waiting on: Director", etc.)
+                    is professional bookkeeping detail, same category as Work Queue's
+                    accountant-only items. Dashboard only, same as the stats/to-do content below —
+                    compliance status is a company-scoped concept, meaningless at the all-clients
+                    portfolio scope. */}
+                {isAcct && active === 'home' && complianceStatus && selectedCompany && (
                   <ComplianceStatusButton status={complianceStatus} company={selectedCompany} />
                 )}
               </View>
@@ -263,7 +266,8 @@ function Brand({ compact }: { compact?: boolean }) {
           'flex-row items-center web:cursor-pointer',
           compact ? '' : 'px-6 pt-6 pb-6'
         )}>
-        <SleekOneLogo height={compact ? 18 : 20} />
+        {/* 10% up from the original 18/20 — top-left brand mark only, not the footer's. */}
+        <SleekOneLogo height={compact ? 20 : 22} />
       </Pressable>
     </Link>
   );
