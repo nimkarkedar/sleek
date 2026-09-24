@@ -1,32 +1,32 @@
-import {
-  complianceStatusFromDueInDays,
-  ComplianceStatusButton,
-} from '@/components/workspace/compliance-status';
+import { ActivityBanner } from '@/components/workspace/activity-banner';
 import { DashboardStats } from '@/components/workspace/dashboard-stats';
-import {
-  DEFAULT_PERIOD,
-  periodTriggerLabel,
-  PeriodSelector,
-  type Period,
-} from '@/components/workspace/period-selector';
-import {
-  getMostUrgentDueInDays,
-  getWorkQueueTotal,
-  WorkList,
-} from '@/components/workspace/work-list';
+import { DEFAULT_PERIOD, PeriodSelector, type Period } from '@/components/workspace/period-selector';
+import { getWorkQueueTotal, WorkList } from '@/components/workspace/work-list';
+import { WorkQueuePage } from '@/components/workspace/transactions-table';
 import { CompanyAvatar, WorkspaceSelector } from '@/components/workspace/workspace-selector';
 import { Chevron, NavigationIcon, type NavIconName } from '@/components/icons/nav-icons';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { SleekOneLogo } from '@/components/logos/sleek-one-logo';
 import { CLIENT_COMPANIES, COMPANIES, type Company, type Scope } from '@/lib/companies';
+import { ScrollEndProvider, useScrollEndBus } from '@/lib/scroll-end';
 import { CHIP_CLASS, CHIP_HOVER_STYLE, CHIP_STYLE } from '@/lib/ui-classes';
 import { cn } from '@/lib/utils';
 import { Portal } from '@rn-primitives/portal';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Menu, X } from 'lucide-react-native';
 import * as React from 'react';
-import { Pressable, ScrollView, View, type TextStyle, type ViewStyle } from 'react-native';
+import {
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Pressable,
+  ScrollView,
+  View,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
+
+type NavSubItem = { key: string; label: string };
 
 type NavItem = {
   key: string;
@@ -36,6 +36,9 @@ type NavItem = {
   accountantOnly?: boolean;
   /** Hidden at the "all clients" portfolio scope — these are per-company modules. */
   companyScoped?: boolean;
+  /** Renders as an accordion — clicking the parent expands/collapses this list in place instead
+   * of navigating; the sub-items themselves are what's actually navigable. */
+  subItems?: NavSubItem[];
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -45,8 +48,17 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'getpaid', label: 'Get Paid', icon: 'getpaid', companyScoped: true },
   { key: 'spend', label: 'Spend', icon: 'spend', companyScoped: true },
   { key: 'banking', label: 'Banking', icon: 'banking', companyScoped: true },
-  { key: 'books', label: 'Books', icon: 'books', companyScoped: true },
-  { key: 'reports', label: 'Reports', icon: 'reports', companyScoped: true },
+  {
+    key: 'ledger',
+    label: 'Ledger',
+    icon: 'books',
+    companyScoped: true,
+    subItems: [
+      { key: 'ledger-adjustments', label: 'Adjustment' },
+      { key: 'ledger-reports', label: 'Reports' },
+      { key: 'ledger-chart-of-accounts', label: 'Chart of accounts' },
+    ],
+  },
 ];
 
 export default function AppShellScreen() {
@@ -58,18 +70,55 @@ export default function AppShellScreen() {
   const [active, setActive] = React.useState('home');
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [period, setPeriod] = React.useState<Period>(DEFAULT_PERIOD);
+  // Measured, not a guessed pixel constant — the sticky title row's actual height (it varies by
+  // font metrics/breakpoint), so pages with their own sticky headers below it (Work Queue's
+  // tabs + filter bar) know exactly where to stick without a rendering gap or overlap.
+  const [titleRowHeight, setTitleRowHeight] = React.useState(0);
+  // Which Work Queue tab to land on — set by whatever navigated here (e.g. the "documents to
+  // upload" to-do item wants the Documents tab, not the default Pending transactions one).
+  // WorkQueuePage only reads this once, on mount, and it only mounts fresh each time `active`
+  // becomes 'work' (it's conditionally rendered, not just hidden) — so there's no risk of a
+  // stale tab leaking into a later, unrelated visit to Work Queue as long as every navigation
+  // goes through `navigate` below, which always sets this (to a tab, or back to undefined).
+  const [workQueueInitialTab, setWorkQueueInitialTab] = React.useState<string | undefined>(
+    undefined
+  );
+
+  function navigate(targetKey: string, targetTab?: string) {
+    setActive(targetKey);
+    setWorkQueueInitialTab(targetTab);
+  }
+
+  // The shell owns the one page-level ScrollView every page's content sits inside — this bus
+  // lets a deep-in-the-tree paginated list (e.g. the Work Queue table) subscribe to "near the
+  // bottom" without the shell needing to know what "more" means for whatever page is active.
+  const { subscribe, notify } = useScrollEndBus();
+  const handleScroll = React.useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      if (contentSize.height - (contentOffset.y + layoutMeasurement.height) < 600) notify();
+    },
+    [notify]
+  );
 
   const nav = NAV_ITEMS.filter(
     (item) =>
       (!item.accountantOnly || isAcct) && (!item.companyScoped || scope.kind === 'company')
   );
+  // A nav key can belong to a top-level item or one of its accordion sub-items (e.g. Ledger's
+  // "Adjustment") — anything that needs to find the currently-active item has to check both.
+  const isKnownKey = (key: string) =>
+    nav.some((n) => n.key === key || n.subItems?.some((s) => s.key === key));
 
   React.useEffect(() => {
-    if (!nav.some((n) => n.key === active)) setActive('home');
+    if (!isKnownKey(active)) setActive('home');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAcct, scope.kind]);
 
-  const activeLabel = nav.find((n) => n.key === active)?.label ?? 'Dashboard';
+  const activeLabel =
+    nav.find((n) => n.key === active)?.label ??
+    nav.flatMap((n) => n.subItems ?? []).find((s) => s.key === active)?.label ??
+    'Dashboard';
   const selectedCompany =
     scope.kind === 'company' ? (COMPANIES.find((c) => c.id === scope.companyId) ?? COMPANIES[0]) : undefined;
   // Derived from the exact same numbers the Work list itself shows (see getWorkQueueTotal) —
@@ -77,12 +126,9 @@ export default function AppShellScreen() {
   // list's own counts, so the two never added up.
   const navBadges: Partial<Record<string, number>> | undefined =
     selectedCompany && isAcct ? { work: getWorkQueueTotal(selectedCompany) } : undefined;
-  const complianceStatus = selectedCompany
-    ? complianceStatusFromDueInDays(getMostUrgentDueInDays(selectedCompany))
-    : undefined;
 
   function selectNav(key: string) {
-    setActive(key);
+    navigate(key);
     setDrawerOpen(false);
   }
 
@@ -180,7 +226,7 @@ export default function AppShellScreen() {
       <View className="flex-1 flex-row">
         {/* NAV COLUMN — hidden below the md breakpoint; the drawer covers nav on mobile. */}
         <View className="hidden w-[240px] flex-col md:flex">
-          <NavList nav={nav} active={active} onSelect={setActive} badges={navBadges} />
+          <NavList nav={nav} active={active} onSelect={navigate} badges={navBadges} />
           {!isAcct && <PoweredByFooter />}
         </View>
 
@@ -191,12 +237,18 @@ export default function AppShellScreen() {
               scrollable region or it's simply unreachable. Capped width so cards/tables don't
               stretch edge-to-edge on wide monitors; left-aligned to stay under the title
               above rather than floating centered. */}
-          <ScrollView className="flex-1 bg-[#F4F5FA]" contentContainerClassName="items-start">
+          <ScrollView
+            className="flex-1 bg-[#F4F5FA]"
+            contentContainerClassName="items-start"
+            onScroll={handleScroll}
+            scrollEventThrottle={200}>
+            <ScrollEndProvider subscribe={subscribe}>
             {/* Sticky, not a static row above the ScrollView — this is what makes the white
                 card visually scroll in underneath the title as the page scrolls, instead of
                 the title and canvas just being two independent stacked blocks. Opaque bg is
                 required so the card is actually occluded once it scrolls behind this. */}
             <View
+              onLayout={(e) => setTitleRowHeight(e.nativeEvent.layout.height)}
               style={{ position: 'sticky', top: 0, zIndex: 10 } as ViewStyle}
               className="w-full bg-[#F4F5FA]">
               {/* Same max-w-[1280px] cap as the content wrapper right below, with a matching
@@ -208,44 +260,66 @@ export default function AppShellScreen() {
                 <Text style={TITLE_STYLE} className={TITLE_CLASS}>
                   {activeLabel}
                 </Text>
-                {/* Accountant only — the panel's content (filings, "waiting on: Director", etc.)
-                    is professional bookkeeping detail, same category as Work Queue's
-                    accountant-only items. Dashboard only, same as the stats/to-do content below —
-                    compliance status is a company-scoped concept, meaningless at the all-clients
-                    portfolio scope. */}
-                {isAcct && active === 'home' && complianceStatus && selectedCompany && (
-                  <ComplianceStatusButton status={complianceStatus} company={selectedCompany} />
-                )}
               </View>
             </View>
-            <View className="w-full max-w-[1280px] p-0 md:p-4">
-              {/* The white "foreground" card — everything else (nav, header) sits on the gray
-                  canvas; this is the one surface that pops forward, giving the page a layered
-                  look instead of one flat plane. Mobile drops the card chrome (rounding, border,
-                  shadow, outer inset) entirely and just runs the white content flush edge to
-                  edge — the floating-card look only reads as intentional when there's enough
-                  width to show the gray margin around it; on a phone it was just eating space. */}
-              <View className="gap-7 bg-white p-6 md:rounded-3xl md:border md:border-[#E4E4E7] md:p-8 md:shadow-sm md:shadow-black/5">
-                {/* Dashboard is the only page with real content right now — Work Queue, Clients,
-                    and the all-clients portfolio views are all empty on purpose, awaiting design. */}
-                {active === 'home' && selectedCompany && (
-                  <>
-                    <DashboardStats
-                      companyId={selectedCompany.id}
-                      periodLabel={periodTriggerLabel(period)}
+            {/* md:pl-8 (not the symmetric md:p-4 this used to be) so every page's white card
+                gets its left border at the same 32px inset the title row/tabs already use —
+                fixed once here instead of each page individually nudging its own card over to
+                compensate. Right side unchanged: md:pr-4 already matched the title row's own
+                right inset. */}
+            <View className="w-full max-w-[1280px] p-0 md:pl-8 md:pr-4 md:py-4">
+              {/* Dashboard gets the shared padded white "foreground" card — everything else
+                  (nav, header) sits on the gray canvas; this is the one surface that pops
+                  forward, giving the page a layered look instead of one flat plane. Mobile
+                  drops the card chrome (rounding, border, shadow, outer inset) entirely and
+                  just runs the white content flush edge to edge — the floating-card look only
+                  reads as intentional when there's enough width to show the gray margin around
+                  it; on a phone it was just eating space. */}
+              {active === 'home' && selectedCompany && (
+                <View className="gap-7 bg-white p-6 md:rounded-3xl md:border md:border-[#E4E4E7] md:p-8 md:shadow-sm md:shadow-black/5">
+                  {/* Keyed by company id so switching companies remounts it (resetting its
+                      dismissed state and picking new random actions) — nothing else about
+                      switching companies would otherwise unmount this component. */}
+                  <ActivityBanner
+                    key={selectedCompany.id}
+                    company={selectedCompany}
+                    onNavigate={navigate}
+                  />
+                  <DashboardStats companyId={selectedCompany.id} />
+                  {isAcct && (
+                    <WorkList
+                      role={role}
+                      company={selectedCompany}
+                      onNavigate={navigate}
+                      showHeading
                     />
-                    {isAcct && (
-                      <WorkList
-                        role={role}
-                        company={selectedCompany}
-                        onNavigate={setActive}
-                        showHeading
-                      />
-                    )}
-                  </>
-                )}
-              </View>
+                  )}
+                </View>
+              )}
+              {/* Work Queue owns its own layout — tabs sit above its white card, not nested
+                  inside it, and the card itself gets no padding (the table runs flush) — so it
+                  renders directly here rather than sharing Dashboard's padded card wrapper. */}
+              {active === 'work' && selectedCompany && (
+                <WorkQueuePage
+                  company={selectedCompany}
+                  stickyOffset={titleRowHeight}
+                  initialTab={workQueueInitialTab}
+                />
+              )}
+              {/* Placeholder for every other nav destination (Ledger's sub-items, Clients, Get
+                  Paid, ...) — none of these have real content built yet. Without this, landing
+                  on one is just a title over empty gray canvas, which reads as "did my click
+                  even do anything?" rather than "this page isn't designed yet." */}
+              {active !== 'home' && active !== 'work' && (
+                <View className="items-center gap-2 bg-white px-6 py-16 md:rounded-3xl md:border md:border-[#E4E4E7] md:shadow-sm md:shadow-black/5">
+                  <Text className="text-base font-plex-semibold text-[#18181B]">
+                    {activeLabel}
+                  </Text>
+                  <Text className="text-sm text-[#656565]">This page hasn't been designed yet.</Text>
+                </View>
+              )}
             </View>
+            </ScrollEndProvider>
           </ScrollView>
         </View>
       </View>
@@ -333,37 +407,102 @@ function NavList({
   onSelect: (key: string) => void;
   badges?: Partial<Record<string, number>>;
 }) {
+  // Auto-expand whichever accordion (if any) contains the active sub-item — otherwise landing
+  // directly on "Chart of accounts" would show it selected inside a collapsed, seemingly-empty
+  // Ledger section. A plain useState initializer only runs once at mount, so a *later*
+  // navigation into a sub-item (e.g. clicking "View details" on the dashboard banner, which
+  // jumps straight to Ledger → Adjustment from elsewhere) wouldn't expand it — this needs to
+  // re-run whenever `active` changes, not just on first render.
+  const [expanded, setExpanded] = React.useState<Set<string>>(
+    () => new Set(nav.filter((n) => n.subItems?.some((s) => s.key === active)).map((n) => n.key))
+  );
+
+  React.useEffect(() => {
+    const parent = nav.find((n) => n.subItems?.some((s) => s.key === active));
+    if (parent && !expanded.has(parent.key)) {
+      setExpanded((prev) => new Set(prev).add(parent.key));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <ScrollView className="flex-1" contentContainerClassName="gap-1 px-4 pb-2">
       {nav.map((item) => {
-        const isActive = item.key === active;
+        const hasSubItems = !!item.subItems?.length;
+        const isExpanded = expanded.has(item.key);
+        // A parent with sub-items reads as "active" whenever one of its children is, even
+        // though the parent itself isn't a navigable page anymore.
+        const isActive = item.key === active || (item.subItems?.some((s) => s.key === active) ?? false);
         return (
-          <Pressable
-            key={item.key}
-            onPress={() => onSelect(item.key)}
-            className={cn(
-              'flex-row items-center gap-3 rounded-lg px-3.5 py-3 web:cursor-pointer',
-              !isActive && 'web:hover:bg-[#F1F1F2]'
-            )}>
-            <NavigationIcon
-              name={item.icon}
-              size={18}
-              color={isActive ? '#2D74E4' : '#3F3F46'}
-              filled={isActive}
-            />
-            <Text
+          <React.Fragment key={item.key}>
+            <Pressable
+              onPress={() => (hasSubItems ? toggleExpanded(item.key) : onSelect(item.key))}
               className={cn(
-                'text-base',
-                isActive ? 'font-plex-bold text-brand' : 'font-plex-medium text-[#3F3F46]'
+                'flex-row items-center gap-3 rounded-lg px-3.5 py-3 web:cursor-pointer',
+                !isActive && 'web:hover:bg-[#F1F1F2]'
               )}>
-              {item.label}
-            </Text>
-            {!!badges?.[item.key] && (
-              <View className="ml-auto h-6 min-w-[24px] items-center justify-center rounded-full bg-[#18181B] px-1.5">
-                <Text className="text-xs font-plex-bold text-white">{badges[item.key]}</Text>
+              <NavigationIcon
+                name={item.icon}
+                size={18}
+                color={isActive ? '#2D74E4' : '#3F3F46'}
+                filled={isActive}
+              />
+              <Text
+                className={cn(
+                  'text-base',
+                  isActive ? 'font-plex-bold text-brand' : 'font-plex-medium text-[#3F3F46]'
+                )}>
+                {item.label}
+              </Text>
+              <View className="ml-auto flex-row items-center gap-2">
+                {!!badges?.[item.key] && (
+                  <View className="h-6 min-w-[24px] items-center justify-center rounded-full bg-[#18181B] px-1.5">
+                    <Text className="text-xs font-plex-bold text-white">{badges[item.key]}</Text>
+                  </View>
+                )}
+                {hasSubItems && (
+                  <View style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}>
+                    <Chevron size={16} color="#656565" />
+                  </View>
+                )}
               </View>
-            )}
-          </Pressable>
+            </Pressable>
+            {hasSubItems &&
+              isExpanded &&
+              item.subItems!.map((sub) => {
+                const subActive = sub.key === active;
+                return (
+                  <Pressable
+                    key={sub.key}
+                    onPress={() => onSelect(sub.key)}
+                    // Indented past the parent's icon column (18px icon + 12px gap + 14px
+                    // padding = 44) via inline style, not an arbitrary `pl-[44px]` class — this
+                    // project's NativeWind setup doesn't compile those reliably.
+                    style={{ paddingLeft: 44 }}
+                    className={cn(
+                      'rounded-lg py-2.5 pr-3.5 web:cursor-pointer',
+                      !subActive && 'web:hover:bg-[#F1F1F2]'
+                    )}>
+                    <Text
+                      className={cn(
+                        'text-sm',
+                        subActive ? 'font-plex-bold text-brand' : 'font-plex-medium text-[#3F3F46]'
+                      )}>
+                      {sub.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+          </React.Fragment>
         );
       })}
     </ScrollView>

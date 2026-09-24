@@ -3,15 +3,7 @@ import { Text } from '@/components/ui/text';
 import { createRng, formatMoney, randomInt } from '@/lib/seeded-random';
 import { TONE_BADGE_CLASS, type Tone } from '@/lib/tone';
 import { cn } from '@/lib/utils';
-import {
-  ArrowDownLeft,
-  ArrowUp,
-  ArrowUpRight,
-  Banknote,
-  TrendingDown,
-  TrendingUp,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUp, ArrowUpRight, Banknote, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -26,10 +18,8 @@ type StatCard = {
 };
 
 /** Seeded per company so switching the workspace selector shows different-looking figures, but
- * the same company always shows the same numbers rather than reshuffling on every render.
- * Revenue/expenses come back raw (not just formatted into cards) so the profit/loss headline
- * above the grid can be computed from the same source instead of drifting from it. */
-function buildStats(companyId: string): { stats: StatCard[]; revenue: number; expenses: number } {
+ * the same company always shows the same numbers rather than reshuffling on every render. */
+function buildStats(companyId: string): { stats: StatCard[] } {
   const rng = createRng(`${companyId}:dashboard-stats`);
   const revenue = randomInt(rng, 8000, 60000) + rng();
   let expenses = randomInt(rng, 5000, 40000) + rng();
@@ -37,15 +27,12 @@ function buildStats(companyId: string): { stats: StatCard[]; revenue: number; ex
   const toPay = rng() < 0.2 ? 0 : randomInt(rng, 200, 6000) + rng();
 
   // Acme is the default company every demo opens on — worth guaranteeing it lands on a profit
-  // (a positive, reassuring number to lead with) rather than leaving the revenue/expense split
-  // to chance every time.
+  // (a positive-looking Revenue/Expenses split) rather than leaving that to chance every time.
   if (companyId === 'acme' && expenses >= revenue) {
     expenses = revenue * 0.8;
   }
 
   return {
-    revenue,
-    expenses,
     stats: [
       {
         key: 'revenue',
@@ -83,41 +70,6 @@ function buildStats(companyId: string): { stats: StatCard[]; revenue: number; ex
   };
 }
 
-/** Revenue vs. expenses for whatever period is selected — deliberately period-agnostic (unlike
- * the old "X% higher than last month" trend line this replaces, which kept comparing against
- * last month even when the page was filtered to a full year) and impossible to miss, since a
- * loss buried in a small card's fine print is exactly what erodes trust. Names the actual
- * selected period instead of a vague "this period" — same label text as the period selector
- * chip above it, so the two can never say different things. */
-function ProfitLossHeadline({
-  revenue,
-  expenses,
-  periodLabel,
-}: {
-  revenue: number;
-  expenses: number;
-  periodLabel: string;
-}) {
-  const diff = revenue - expenses;
-  const isProfit = diff >= 0;
-  return (
-    <View className="flex-row items-center gap-2">
-      <Icon
-        as={isProfit ? TrendingUp : TrendingDown}
-        size={18}
-        className={isProfit ? 'text-success-text' : 'text-destructive-text'}
-      />
-      <Text
-        className={cn(
-          'text-base font-plex-semibold',
-          isProfit ? 'text-success-text' : 'text-destructive-text'
-        )}>
-        {isProfit ? 'Profit' : 'Loss'} of {formatMoney(Math.abs(diff))} SGD · {periodLabel}
-      </Text>
-    </View>
-  );
-}
-
 function StatCardBody({ stat }: { stat: StatCard }) {
   return (
     <>
@@ -140,13 +92,11 @@ function StatCardBody({ stat }: { stat: StatCard }) {
 const CARD_CLASS =
   'gap-2.5 rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-sm shadow-black/5';
 
-export function DashboardStats({ companyId, periodLabel }: { companyId: string; periodLabel: string }) {
-  const { stats, revenue, expenses } = React.useMemo(() => buildStats(companyId), [companyId]);
+export function DashboardStats({ companyId }: { companyId: string }) {
+  const { stats } = React.useMemo(() => buildStats(companyId), [companyId]);
 
   return (
     <>
-      <ProfitLossHeadline revenue={revenue} expenses={expenses} periodLabel={periodLabel} />
-
       {/* Mobile: horizontal scroll — 4 cards don't fit a phone width, so let them scroll
           sideways instead of stacking (unreadable) or shrinking to illegibly narrow columns. */}
       <ScrollView

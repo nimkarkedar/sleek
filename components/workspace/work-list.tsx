@@ -1,16 +1,17 @@
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { type Company } from '@/lib/companies';
 import { createRng, randomInt } from '@/lib/seeded-random';
 import { TONE_BADGE_CLASS, TONE_HEX } from '@/lib/tone';
-import { cn } from '@/lib/utils';
+import { cn, hexToRgba } from '@/lib/utils';
 import {
   ArrowLeftRight,
   ArrowRight,
+  BarChart3,
   ClipboardCheck,
   FileText,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react-native';
 import * as React from 'react';
@@ -24,15 +25,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 /**
- * Two kinds of "to do":
- *  - 'queue': an aggregate count of pending items (transactions, documents). These can't be
- *    checked off with a single tap — the count changes as new items arrive, and "done" means
- *    working through each one, not toggling a box. Shown with a domain icon + a CTA that jumps
- *    into the relevant queue. All queue icons share one neutral color — the color used to vary
- *    per item with no real meaning behind which item got red vs green, which read as arbitrary.
- *  - 'task': a genuine one-off action (send this report). These get a real checkbox, since
- *    marking it done is exactly what completing the task means — this is the actual
- *    "close it out" loop we want the accountant forming a habit around.
+ * Every row is the same shape now — icon, title/subtext, a due date, and a CTA that jumps into
+ * the relevant queue. There used to be a second 'task' variant with a checkbox instead of an
+ * icon (for one-off actions like sending a report), but the whole row is a single click-through
+ * to the target now, so a separate "mark as done here" interaction didn't have a place anymore.
  *
  * `dueInDays` (0 = today, negative = overdue) drives both the sort order (most urgent first)
  * and the row's urgency styling — red, in this list, means exactly one thing: due today or
@@ -42,32 +38,62 @@ import Animated, {
  * a couple of items are professional bookkeeping tasks the accountant does *for* the client
  * (sending a report, reviewing compliance flags), not something a business owner does for
  * themselves — those are hidden from the Client view.
+ *
+ * `subtext` — the human "why," one short sentence (e.g. "Needed to complete this month's
+ * reconciliation"). `feedsInto`/`authority` aren't rendered by the current row design (a plain
+ * title/subtext/due/CTA layout has no chip for them) but are kept on the data — what this feeds
+ * and which government body ultimately requires it — since that's real product logic worth not
+ * throwing away while the visual design is still being iterated on.
  */
-type TodoItem =
-  | {
-      id: string;
-      kind: 'queue';
-      icon: LucideIcon;
-      title: string;
-      subtitle: string;
-      ctaLabel: string;
-      targetKey: string;
-      dueInDays: number;
-      clientVisible?: boolean;
-    }
-  | {
-      id: string;
-      kind: 'task';
-      title: string;
-      subtitle: string;
-      ctaLabel: string;
-      targetKey: string;
-      dueInDays: number;
-      clientVisible?: boolean;
-    };
+type TodoItem = {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  subtext: string;
+  feedsInto: string;
+  authority?: 'ACRA' | 'IRAS';
+  ctaLabel: string;
+  targetKey: string;
+  /** Which Work Queue tab this should land on, when `targetKey` is 'work' — e.g. "documents to
+   * upload" opens straight on the Documents tab instead of the default Pending transactions
+   * one. Left unset for items that don't have a specific tab to point at. */
+  targetTab?: string;
+  dueInDays: number;
+  clientVisible?: boolean;
+};
 
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return count === 1 ? singular : plural;
+}
+
+/** Whole-day difference, ignoring time-of-day — negative once the date has passed. */
+function daysUntil(date: Date): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const startOfTarget = new Date(date).setHours(0, 0, 0, 0);
+  const startOfToday = new Date().setHours(0, 0, 0, 0);
+  return Math.round((startOfTarget - startOfToday) / msPerDay);
+}
+
+const MONTHLY_CLOSE_DAY = 10;
+
+/** The recurring "books close by the Nth" cadence that reconciliation (transactions +
+ * documents) actually feeds — same idea for every company, not company-specific, since it's a
+ * calendar cutoff, not a per-company fact. */
+function nextMonthlyCloseDate(): Date {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), MONTHLY_CLOSE_DAY);
+  if (target < now) target.setMonth(target.getMonth() + 1);
+  return target;
+}
+
+/** Annual Return, 31 Oct — same filing deadline the (currently hidden) compliance panel used.
+ * Kept here independently of that panel: the underlying deadline is still real and still worth
+ * driving this list's urgency, even while the panel itself is on hold. */
+function nextAnnualReturnDate(): Date {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), 9, 31);
+  if (target < now) target.setFullYear(target.getFullYear() + 1);
+  return target;
 }
 
 /** Seeded per company — deterministic per item, not just per company, so adding/reordering
@@ -98,98 +124,120 @@ export function getWorkQueueTotal(company: Company): number {
 // All CTAs currently point back at Work — there's no deeper per-item destination built yet.
 // Each item carries its own `targetKey` so pointing individual items elsewhere later (Books,
 // Reports, ...) is a one-line data change, not a restructure.
+//
+// Due dates below are no longer arbitrary per-item offsets — they're the real thing each task
+// feeds: transactions/documents/the monthly report all key off the recurring monthly close,
+// flagged items off the Annual Return filing. This is the fix for the actual product problem —
+// a client who only sees "8 documents pending" every month has no reason to believe it's urgent
+// and puts it off; showing what it's actually blocking, and a real deadline, is what's supposed
+// to break that procrastination loop.
 function buildTodos(company: Company): TodoItem[] {
   const { pendingTransactions, documents, approvals, flags } = computeTodoCounts(company);
-  const due = (id: string) => randomInt(itemRng(company, `${id}:due`), -3, 7);
+  const monthlyCloseDue = daysUntil(nextMonthlyCloseDate());
+  // Cleared with some runway before the filing itself — this is prep work, not the filing day.
+  const flagsDue = daysUntil(nextAnnualReturnDate()) - 21;
 
   // Acme is the company everyone lands on by default (COMPANIES[0]), so it's the one every demo
   // opens with — worth guaranteeing it actually shows the urgent/red state on the top-priority
   // item instead of leaving that to chance every time the seed happens to roll something urgent.
-  const pendingTransactionsDue =
-    company.id === 'acme' ? -1 : due('pending-transactions');
+  const pendingTransactionsDue = company.id === 'acme' ? -1 : monthlyCloseDue;
 
   return [
     {
       id: 'pending-transactions',
-      kind: 'queue',
       icon: ArrowLeftRight,
       title: `${pendingTransactions} pending transactions need your attention`,
-      subtitle: 'Review and categorize to keep the books accurate',
+      subtext: "Needed to complete this month's management accounts",
+      feedsInto: 'Monthly management accounts',
+      authority: 'IRAS',
       ctaLabel: 'Review',
       targetKey: 'work',
       dueInDays: pendingTransactionsDue,
     },
     {
       id: 'documents-to-upload',
-      kind: 'queue',
       icon: FileText,
-      title: `${documents} documents to be uploaded to reconcile transactions`,
-      subtitle: 'Missing receipts and invoices for this month',
+      title: `${documents} documents to upload`,
+      subtext: "Needed to complete this month's reconciliation",
+      feedsInto: 'Monthly management accounts',
+      authority: 'IRAS',
       ctaLabel: 'Upload',
       targetKey: 'work',
-      dueInDays: due('documents-to-upload'),
+      targetTab: 'documents',
+      dueInDays: monthlyCloseDue,
     },
     {
       id: 'send-monthly-report',
-      kind: 'task',
+      icon: BarChart3,
       title: 'Send monthly report to the client',
-      subtitle: `Keeps ${company.name} updated on their financial health`,
+      subtext: "Shares this month's management accounts with the client",
+      feedsInto: 'Client reporting',
+      // No authority tag — this is a business courtesy, not a government filing.
       ctaLabel: 'Open',
       targetKey: 'work',
-      dueInDays: due('send-monthly-report'),
+      // Goes out once the books above are actually closed.
+      dueInDays: monthlyCloseDue + 2,
       clientVisible: false,
     },
     {
       id: 'approval-requests',
-      kind: 'queue',
       icon: ClipboardCheck,
       title: `${approvals} approval ${pluralize(approvals, 'request')} waiting`,
-      subtitle: 'Payment runs held up until you sign off',
+      subtext: 'Needed to keep supplier payments and the books in sync',
+      feedsInto: 'Monthly management accounts',
+      authority: 'IRAS',
       ctaLabel: 'Approve',
       targetKey: 'work',
-      dueInDays: due('approval-requests'),
+      dueInDays: monthlyCloseDue,
     },
     {
       id: 'review-flags',
-      kind: 'task',
-      title: 'Review flagged compliance items',
-      subtitle: `${flags} ${pluralize(flags, 'item')} flagged during last reconciliation`,
+      icon: ShieldCheck,
+      title: `${flags} flagged compliance ${pluralize(flags, 'item')} to review`,
+      subtext: 'Needed to finalise financial statements for the year',
+      feedsInto: 'Annual filing',
+      authority: 'ACRA',
       ctaLabel: 'Open',
       targetKey: 'work',
-      dueInDays: due('review-flags'),
+      dueInDays: flagsDue,
       clientVisible: false,
     },
   ];
 }
 
-/** Most urgent `dueInDays` across every item in this company's list (across both roles' items —
- * compliance status is a company-level signal, not scoped to what one persona happens to see).
- * Drives the compliance-status indicator up in the header, so "pending" there means exactly the
- * same thing "overdue/due today" means in the list itself, not a second invented signal. */
-export function getMostUrgentDueInDays(company: Company): number {
-  const todos = buildTodos(company);
-  return Math.min(...todos.map((t) => t.dueInDays));
-}
-
 const BADGE_SIZE = 36;
 const ROW_HOVER_BG = '#FAFAFA';
 
-function hexToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+// The actual calendar date, e.g. "30 Sep" — sits above the relative countdown so the due column
+// reads as a real deadline, not just an abstract day counter.
+function dueDateLabel(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function dueLabel(days: number): string {
+// Relative countdown — "6 days left," "Overdue by 3 days," collapsing to whole months once a
+// deadline is far enough out ("3 months left") that a day count stops being meaningful.
+function dueCountdown(days: number): string {
   if (days < 0) return `Overdue by ${Math.abs(days)} ${pluralize(Math.abs(days), 'day')}`;
   if (days === 0) return 'Due today';
-  if (days === 1) return 'Due tomorrow';
-  return `Due in ${days} days`;
+  if (days === 1) return '1 day left';
+  if (days > 60) {
+    const months = Math.max(1, Math.round(days / 30));
+    return `${months} ${pluralize(months, 'month')} left`;
+  }
+  return `${days} days left`;
 }
 
 /** The one and only meaning red carries in this list — due today or overdue. Nothing else
- * (item type, category, icon) borrows it. */
+ * (item type, category, icon) borrows it. Anything closer than 3 days gets a softer amber
+ * instead of full red, so "overdue" still reads as the one unambiguous alarm state. */
+function dueCountdownColor(days: number): string {
+  if (isUrgent(days)) return TONE_HEX.destructive;
+  if (days <= 3) return '#D97706';
+  return '#656565';
+}
+
 function isUrgent(days: number): boolean {
   return days <= 0;
 }
@@ -233,12 +281,10 @@ function PulseRing({ color }: { color: string }) {
 type TodoRowProps = {
   todo: TodoItem;
   isLast: boolean;
-  isChecked: boolean;
-  onToggle: () => void;
-  onNavigate: (targetKey: string) => void;
+  onNavigate: (targetKey: string, targetTab?: string) => void;
 };
 
-function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps) {
+function TodoRow({ todo, isLast, onNavigate }: TodoRowProps) {
   const [hovered, setHovered] = React.useState(false);
   const urgent = isUrgent(todo.dueInDays);
 
@@ -251,80 +297,82 @@ function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps
 
   return (
     <Pressable
+      onPress={() => onNavigate(todo.targetKey, todo.targetTab)}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
+      // No accessibilityRole="button" here — RN Web renders that as a real <button>, and this
+      // row contains the CTA, which is already a <button> of its own. A <button> can't nest
+      // another <button> (invalid HTML, React warns). The row is still fully clickable via
+      // onPress; accessibilityLabel keeps it announced sensibly without claiming a role that
+      // conflicts with its child.
+      accessibilityLabel={todo.title}
       style={{ backgroundColor: hovered ? hoverBg : baseBg }}
-      // Column by default (RN's flex-direction default) so the CTA drops below the icon+title
-      // on mobile instead of being squeezed onto the same tight row — row again from md up,
-      // matching the original single-row layout.
+      // Row on every breakpoint now — icon column, then one content column holding
+      // title/due/CTA. Previously the icon+title were one group and due/CTA were separate
+      // siblings faking alignment with a guessed `ml-14` margin matching the icon's width; any
+      // mismatch between that margin and the icon's real width/gap showed up as misalignment.
+      // Nesting everything text-related inside one column instead means it's the same flexbox
+      // aligning them, not two numbers happening to match.
       className={cn(
-        'gap-3 px-6 py-5 md:flex-row md:items-center md:gap-4',
+        'flex-row gap-4 px-6 py-5 web:cursor-pointer',
         !isLast && 'border-b border-[#E4E4E7]'
       )}>
-      {/* flex-1 so this group fills the row on desktop (md:flex-row on the outer Pressable) and
-          pushes the button to the far right, same as before this was split into two groups —
-          without it the group shrink-wraps and the button ends up stranded right next to the
-          text instead of at the row's edge. items-start top-aligns the icon column and the text
-          column against each other when the title wraps to two lines. */}
-      <View className="flex-1 flex-row items-start gap-4">
-        {/* Fixed-width, horizontally centered — task rows' 24px checkbox and queue rows' 36px
-            badge sit in the same column this way, so the text (and, on mobile, the CTA below
-            it) always starts at the same x regardless of which icon a given row has. */}
-        <View className="w-9 items-center">
-          {todo.kind === 'task' ? (
-            <Pressable
-              onPress={onToggle}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: isChecked }}
-              accessibilityLabel={todo.title}
-              hitSlop={8}
-              className="web:cursor-pointer">
-              <Checkbox checked={isChecked} />
-            </Pressable>
-          ) : (
-            <View
-              className="items-center justify-center"
-              style={{ width: BADGE_SIZE, height: BADGE_SIZE }}>
-              {urgent && <PulseRing color={TONE_HEX.destructive} />}
-              <View
-                className={`h-9 w-9 items-center justify-center rounded-full ${TONE_BADGE_CLASS.neutral}`}>
-                <Icon as={todo.icon} size={16} className="text-white" />
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View className="flex-1 gap-0.5">
-          <Text
-            className={cn(
-              'text-base text-[#18181B]',
-              isChecked && 'text-[#9A9A9A] line-through'
-            )}>
-            {todo.title}
-          </Text>
-          <Text className="hidden text-sm text-[#656565] md:flex">{todo.subtitle}</Text>
-          <Text
-            className={cn(
-              'text-xs font-plex-medium',
-              urgent ? 'text-destructive-text' : 'text-[#9A9A9A]'
-            )}>
-            {dueLabel(todo.dueInDays)}
-          </Text>
+      <View
+        className="items-center justify-center"
+        style={{ width: BADGE_SIZE, height: BADGE_SIZE }}>
+        {urgent && <PulseRing color={TONE_HEX.destructive} />}
+        <View
+          className={`h-9 w-9 items-center justify-center rounded-full ${TONE_BADGE_CLASS.neutral}`}>
+          <Icon as={todo.icon} size={16} className="text-white" />
         </View>
       </View>
 
-      {/* Indented to the icon column's width (36) + the row's own gap (16) = the same x the text
-          above starts at — one constant value now that the icon column itself is a fixed width.
-          Cancelled out on desktop, where the row's own gap-4 handles spacing instead. */}
-      <View className="ml-14 md:ml-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start"
-          onPress={() => onNavigate(todo.targetKey)}>
-          <Text className="text-sm font-plex-medium">{todo.ctaLabel}</Text>
-          <Icon as={ArrowRight} size={14} />
-        </Button>
+      {/* Content column — title/due/CTA stacked on mobile, laid out as three sub-columns on
+          desktop. flex-1 so it absorbs whatever width the icon doesn't take. */}
+      <View className="flex-1 gap-3 md:flex-row md:items-center md:gap-4">
+        <View className="flex-1">
+          <Text className="text-base font-plex-semibold text-[#18181B]">{todo.title}</Text>
+          {/* The human "why" — desktop only. Mobile already stacks title / due+countdown / CTA
+              as three separate rows; adding a fourth (this) made the card too tall — the title
+              alone carries enough context there.
+              Spacing is a margin on this Text itself (`mt-1`), not a `gap` on the parent — RN's
+              flex `gap` doesn't reliably exclude a `hidden` (display:none) child from the gap
+              calculation the way web CSS does, which was adding phantom space below the title
+              on mobile even with this element invisible. A margin on a display:none element is
+              unambiguously zero, gap or no gap. */}
+          <Text className="hidden text-sm text-[#656565] md:mt-1 md:flex">{todo.subtext}</Text>
+        </View>
+
+        {/* Due date + countdown. One line on mobile ("Due 23 Sep · Overdue by 1 day") to keep
+            the card from growing an extra row per item; two lines on desktop, in its own
+            fixed-width column (`md:w-40` — a real Tailwind scale class, not an arbitrary
+            `md:w-[160px]` one, which is the kind that doesn't compile reliably in this project)
+            — without the fixed width, this column's start position shifted row to row because
+            the CTA column after it wasn't fixed-width either (see below), so a longer/shorter
+            button label pushed everything before it sideways. */}
+        <View className="flex-row items-center gap-1.5 md:w-40 md:flex-col md:items-start md:gap-0.5">
+          <Text className="text-sm text-[#656565]">Due {dueDateLabel(todo.dueInDays)}</Text>
+          <Text className="text-sm text-[#656565] md:hidden">·</Text>
+          <Text
+            style={{ color: dueCountdownColor(todo.dueInDays) }}
+            className="text-sm font-plex-semibold">
+            {dueCountdown(todo.dueInDays)}
+          </Text>
+        </View>
+
+        {/* CTA — fixed width + right-aligned on desktop (same reasoning as the due column
+            above: "Approve" and "Open" are different lengths, so without a fixed width here the
+            due column's own position would still drift). */}
+        <View className="md:w-32 md:items-end">
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onPress={() => onNavigate(todo.targetKey, todo.targetTab)}>
+            <Text className="text-sm font-plex-medium">{todo.ctaLabel}</Text>
+            <Icon as={ArrowRight} size={14} />
+          </Button>
+        </View>
       </View>
     </Pressable>
   );
@@ -333,7 +381,7 @@ function TodoRow({ todo, isLast, isChecked, onToggle, onNavigate }: TodoRowProps
 type WorkListProps = {
   role: 'client' | 'accountant';
   company: Company;
-  onNavigate: (targetKey: string) => void;
+  onNavigate: (targetKey: string, targetTab?: string) => void;
   /** Accountant's Dashboard shows this as "To do for the day" — their main task list, not just
    * a nav destination. The standalone Work page renders the same list without the heading, since
    * the page title there already says "Work". */
@@ -341,17 +389,7 @@ type WorkListProps = {
 };
 
 export function WorkList({ role, company, onNavigate, showHeading }: WorkListProps) {
-  const [checkedIds, setCheckedIds] = React.useState<Set<string>>(new Set());
   const todos = React.useMemo(() => buildTodos(company), [company]);
-
-  function toggle(id: string) {
-    setCheckedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   // Most urgent first — otherwise a task due today can end up buried under one due next week
   // just because of where it happens to sit in the source list.
@@ -362,14 +400,9 @@ export function WorkList({ role, company, onNavigate, showHeading }: WorkListPro
   return (
     <View className="gap-5">
       {showHeading && (
-        <View className="flex-row items-center justify-between">
-          <Text className="text-xl font-plex-bold tracking-tight text-[#18181B]">
-            To do for the day
-          </Text>
-          <Pressable onPress={() => onNavigate('work')} className="web:cursor-pointer">
-            <Text className="text-sm font-plex-medium text-brand">View all</Text>
-          </Pressable>
-        </View>
+        <Text className="text-xl font-plex-bold tracking-tight text-[#18181B]">
+          To do for the day
+        </Text>
       )}
       <View className="rounded-2xl border border-[#E4E4E7] bg-white shadow-sm shadow-black/5">
         {visible.map((todo, index) => (
@@ -377,8 +410,6 @@ export function WorkList({ role, company, onNavigate, showHeading }: WorkListPro
             key={todo.id}
             todo={todo}
             isLast={index === visible.length - 1}
-            isChecked={todo.kind === 'task' && checkedIds.has(todo.id)}
-            onToggle={() => toggle(todo.id)}
             onNavigate={onNavigate}
           />
         ))}
