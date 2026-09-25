@@ -39,6 +39,8 @@ export const NAV_ICON_PATHS = {
     'M8 2v3M16 2v3M3.5 9h17M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 13h5M8 17h8',
   clients:
     'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16.5 11a2.5 2.5 0 1 0 0-5M18.5 14.2c1.7.6 3 2 3.4 3.8',
+  files: 'M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z',
+  settings: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
   chevronDown: 'M6 9l6 6 6-6',
 } as const;
 

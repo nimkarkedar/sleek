@@ -1,5 +1,6 @@
 import '@/global.css';
 
+import { ToastProvider } from '@/components/ui/toast';
 import { NAV_THEME } from '@/lib/theme';
 import { PortalHost } from '@rn-primitives/portal';
 import {
@@ -40,7 +41,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={NAV_THEME[colorScheme ?? 'light']}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }} />
+      <ToastProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </ToastProvider>
       <PortalHost />
     </ThemeProvider>
   );

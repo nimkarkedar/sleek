@@ -1,9 +1,10 @@
 import { computeTodoCounts } from '@/components/workspace/work-list';
+import { PageTabs, useVisibleTab } from '@/components/workspace/page-tabs';
 import { WorkQueueFilterBar } from '@/components/workspace/work-queue-filters';
 import { Icon } from '@/components/ui/icon';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Text } from '@/components/ui/text';
 import { type Company } from '@/lib/companies';
+import type { NavChild } from '@/lib/permissions';
 import { useOnScrollEnd } from '@/lib/scroll-end';
 import { createRng, formatMoney, randomInt } from '@/lib/seeded-random';
 import {
@@ -355,39 +356,34 @@ function TransactionsTable({ transactions }: { transactions: Transaction[] }) {
   );
 }
 
-const TABS = [
-  { key: 'pending-transactions', label: 'Pending transactions' },
-  { key: 'documents', label: 'Documents' },
-] as const;
-
-export type WorkQueueTabKey = (typeof TABS)[number]['key'];
-
-function isWorkQueueTabKey(value: string | undefined): value is WorkQueueTabKey {
-  return TABS.some((t) => t.key === value);
-}
-
 export function WorkQueuePage({
   company,
+  tabs,
   stickyOffset,
   initialTab,
 }: {
   company: Company;
+  /** The persona's visible Work Queue tabs, already filtered + labelled by `buildNav`. */
+  tabs: NavChild[];
   /** The page title row's measured height — this page's own sticky tabs/filter bar stack
    * directly below it, not at the viewport's very top. */
   stickyOffset: number;
   /** Set by whatever navigated here — e.g. the "documents to upload" to-do item wants this
    * page to open straight on the Documents tab, not the default. Loosely typed as `string` by
-   * the caller (shell.tsx tracks it as generic nav state), so it's validated here rather than
-   * trusted — an unrecognized value just falls back to the default tab. */
+   * the caller (shell.tsx tracks it as generic nav state), so it's validated against `tabs`
+   * rather than trusted — an unrecognized or hidden tab just falls back to the first one. */
   initialTab?: string;
 }) {
-  const [tab, setTab] = React.useState<WorkQueueTabKey>(
-    isWorkQueueTabKey(initialTab) ? initialTab : 'pending-transactions'
-  );
+  const [tab, setTab] = useVisibleTab(tabs, initialTab);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilterValue>('needs-attention');
   const [query, setQuery] = React.useState('');
   const [tabsHeight, setTabsHeight] = React.useState(0);
   const counts = React.useMemo(() => computeTodoCounts(company), [company]);
+  // Only the two tabs with real per-company data show a count bubble.
+  const tabCounts: Partial<Record<string, number>> = {
+    'pending-transactions': counts.pendingTransactions,
+    documents: counts.documents,
+  };
 
   const allTransactions = React.useMemo(() => {
     if (tab !== 'pending-transactions') return [];
@@ -406,33 +402,25 @@ export function WorkQueuePage({
 
   return (
     <>
-      {/* Tabs sit on the gray canvas, above the white box — not nested inside it. Sticky right
-          below the title row (not at the viewport top): stacked sticky elements within the same
-          scroll container each just need a `top` past whatever sticky layer(s) come before
-          them. Opaque bg for the same reason the title row needs one — otherwise table rows
-          scrolling underneath would show through once this is pinned. */}
-      <View
-        onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}
-        style={{ position: 'sticky', top: stickyOffset, zIndex: 9 } as ViewStyle}
-        className="mb-4 bg-[#F4F5FA] px-6 py-1 md:px-0">
-        <SegmentedControl
-          value={tab}
-          onValueChange={(value) => setTab(value as WorkQueueTabKey)}
-          options={TABS.map((t) => ({
-            value: t.key,
-            label: t.label,
-            count: t.key === 'documents' ? counts.documents : counts.pendingTransactions,
-          }))}
-        />
-      </View>
+      {/* Tabs sit on the gray canvas, above the white box — not nested inside it — stacked
+          right below the title row. */}
+      <PageTabs
+        value={tab}
+        onValueChange={setTab}
+        options={tabs.map((t) => ({ value: t.key, label: t.label, count: tabCounts[t.key] }))}
+        stickyOffset={stickyOffset}
+        onLayoutHeight={setTabsHeight}
+      />
 
       {/* The box's left border now lines up with the title/tabs via the shared page wrapper's
           own md:pl-8 (app/shell.tsx) — no page-specific margin needed here anymore. */}
       <View className="bg-white md:rounded-3xl md:border md:border-[#E4E4E7] md:shadow-sm md:shadow-black/5">
-        {tab === 'documents' ? (
+        {tab !== 'pending-transactions' ? (
           <View className="items-center gap-2 px-6 py-16">
             <Icon as={Inbox} size={28} className="text-muted-foreground" />
-            <Text className="text-sm text-muted-foreground">Documents view is coming soon.</Text>
+            <Text className="text-sm text-muted-foreground">
+              {tabs.find((t) => t.key === tab)?.label} view is coming soon.
+            </Text>
           </View>
         ) : (
           <>
