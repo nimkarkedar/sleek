@@ -30,7 +30,7 @@ export function LoginHero({ heroImage }: { heroImage?: ImageSourcePropType }) {
             <Rect width="100%" height="100%" fill="url(#login-hero)" />
           </Svg>
           <View className="flex-1 items-center justify-center">
-            <Text className="font-plex-medium text-brand text-sm">Visual goes here</Text>
+            <Text className="text-sm text-brand">Visual goes here</Text>
           </View>
         </>
       )}

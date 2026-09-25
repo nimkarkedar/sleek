@@ -1,7 +1,9 @@
 import { computeTodoCounts } from '@/components/workspace/work-list';
 import { PageTabs, useVisibleTab } from '@/components/workspace/page-tabs';
 import { WorkQueueFilterBar } from '@/components/workspace/work-queue-filters';
+import { DateBadge } from '@/components/ui/date-badge';
 import { Icon } from '@/components/ui/icon';
+import { TintedPill } from '@/components/ui/tinted-pill';
 import { Text } from '@/components/ui/text';
 import { type Company } from '@/lib/companies';
 import type { NavChild } from '@/lib/permissions';
@@ -46,7 +48,10 @@ const BANK_ACCOUNTS: BankAccount[] = [
 ];
 
 // "Small" (card-sized) vs "large" (transfer-sized) magnitude ranges, in SGD.
-const AMOUNT_RANGE = { small: [15, 3500] as [number, number], large: [200, 250000] as [number, number] };
+const AMOUNT_RANGE = {
+  small: [15, 3500] as [number, number],
+  large: [200, 250000] as [number, number],
+};
 
 const COUNTERPARTIES = [
   'XYZ Company Pte Ltd',
@@ -84,7 +89,15 @@ function pick<T>(rng: () => number, options: T[]): T {
   return options[randomInt(rng, 0, options.length - 1)];
 }
 
-const TXN_KINDS = ['paynow-to', 'paynow-from', 'card', 'giro', 'transfer', 'cheque', 'stripe'] as const;
+const TXN_KINDS = [
+  'paynow-to',
+  'paynow-from',
+  'card',
+  'giro',
+  'transfer',
+  'cheque',
+  'stripe',
+] as const;
 
 function buildTransaction(
   rng: () => number,
@@ -155,7 +168,9 @@ function buildTransaction(
  * can never show a row count that disagrees with what the rest of the app already promised. */
 function generateTransactions(company: Company, tabKey: string, count: number): Transaction[] {
   const rng = createRng(`${company.id}:transactions:${tabKey}`);
-  const rows = Array.from({ length: count }, (_, i) => buildTransaction(rng, `${tabKey}-${i}`, undefined));
+  const rows = Array.from({ length: count }, (_, i) =>
+    buildTransaction(rng, `${tabKey}-${i}`, undefined)
+  );
   return rows.sort((a, b) => a.daysAgo - b.daysAgo);
 }
 
@@ -174,25 +189,9 @@ function dateParts(daysAgo: number): { month: string; year: string; day: number 
   };
 }
 
-function DateBadge({ daysAgo }: { daysAgo: number }) {
+function TransactionDate({ daysAgo }: { daysAgo: number }) {
   const { month, year, day } = dateParts(daysAgo);
-  return (
-    // Square, ~56x56 — two separately-padded sections with a full-bleed divider between them
-    // (not a short centered line inside shared padding); `overflow-hidden` keeps the divider's
-    // edges from poking past the rounding. Padding trimmed down from an earlier pass that made
-    // this noticeably taller than it is wide.
-    <View className="w-14 overflow-hidden rounded-xl bg-muted">
-      <View className="items-center px-2 py-1.5">
-        <Text className="text-[10px] font-plex-semibold uppercase text-muted-foreground">
-          {month} {year}
-        </Text>
-      </View>
-      <View className="h-px w-full bg-white" />
-      <View className="items-center px-2 py-1.5">
-        <Text className="text-base font-plex-bold leading-none text-foreground">{day}</Text>
-      </View>
-    </View>
-  );
+  return <DateBadge top={`${month} ${year}`} bottom={String(day)} />;
 }
 
 function BankAccountLabel({ bank }: { bank: BankAccount }) {
@@ -212,16 +211,7 @@ function BankAccountLabel({ bank }: { bank: BankAccount }) {
 
 function StatusPill({ status }: { status: TransactionStatus }) {
   const meta = STATUS_META[status];
-  return (
-    <View
-      style={{ backgroundColor: hexToRgba(meta.color, 0.12) }}
-      className="flex-row items-center gap-1.5 self-start rounded-md px-2.5 py-1.5">
-      <Icon as={meta.icon} size={14} color={meta.color} />
-      <Text style={{ color: meta.color }} className="text-sm font-plex-medium">
-        {meta.label}
-      </Text>
-    </View>
-  );
+  return <TintedPill label={meta.label} icon={meta.icon} color={meta.color} />;
 }
 
 /** Desktop table row — DATE / DESCRIPTION / BANK ACCOUNT / AMOUNT / STATUS columns, plus a
@@ -234,17 +224,20 @@ function DesktopTransactionRow({ txn, isLast }: { txn: Transaction; isLast: bool
       onHoverOut={() => setHovered(false)}
       accessibilityRole="button"
       style={{ backgroundColor: hovered ? '#FAFAFA' : 'transparent' }}
-      className={cn('hidden flex-row items-center gap-4 px-6 py-4 web:cursor-pointer md:flex md:px-4', !isLast && 'border-b border-border')}>
+      className={cn(
+        'hidden flex-row items-center gap-4 px-6 py-4 web:cursor-pointer md:flex md:px-4',
+        !isLast && 'border-b border-border'
+      )}>
       <View className="w-16">
-        <DateBadge daysAgo={txn.daysAgo} />
+        <TransactionDate daysAgo={txn.daysAgo} />
       </View>
-      <Text className="flex-1 text-base font-plex-regular text-foreground" numberOfLines={2}>
+      <Text className="flex-1 font-plex-regular text-base text-foreground" numberOfLines={2}>
         {txn.description}
       </Text>
       <View className="w-[150px]">
         <BankAccountLabel bank={txn.bank} />
       </View>
-      <Text className="w-[130px] text-right text-base font-plex-semibold text-foreground">
+      <Text className="w-[130px] text-right font-plex-semibold text-base text-foreground">
         {formatAmount(txn.amount)}
       </Text>
       <View className="w-[170px]">
@@ -264,9 +257,9 @@ function MobileTransactionCard({ txn }: { txn: Transaction }) {
       accessibilityRole="button"
       className="overflow-hidden rounded-2xl border border-border bg-white web:cursor-pointer md:hidden">
       <View className="flex-row items-start gap-3 p-4">
-        <DateBadge daysAgo={txn.daysAgo} />
+        <TransactionDate daysAgo={txn.daysAgo} />
         <View className="flex-1 gap-1.5">
-          <Text className="text-base font-plex-regular text-foreground" numberOfLines={2}>
+          <Text className="font-plex-regular text-base text-foreground" numberOfLines={2}>
             {txn.description}
           </Text>
           <BankAccountLabel bank={txn.bank} />
@@ -277,12 +270,14 @@ function MobileTransactionCard({ txn }: { txn: Transaction }) {
         className="flex-row items-center justify-between px-4 py-3">
         <View className="flex-row items-center gap-1.5">
           <Icon as={meta.icon} size={14} color={meta.color} />
-          <Text style={{ color: meta.color }} className="text-sm font-plex-medium">
+          <Text style={{ color: meta.color }} className="text-sm">
             {meta.label}
           </Text>
         </View>
         <View className="flex-row items-center gap-1.5">
-          <Text className="text-base font-plex-bold text-foreground">{formatAmount(txn.amount)}</Text>
+          <Text className="font-plex-semibold text-base text-foreground">
+            {formatAmount(txn.amount)}
+          </Text>
           <Icon as={ChevronRight} size={16} className="text-muted-foreground" />
         </View>
       </View>
@@ -323,19 +318,19 @@ function TransactionsTable({ transactions }: { transactions: Transaction[] }) {
     <View>
       {/* Desktop-only header row — mobile cards carry their own labels inline. */}
       <View className="hidden flex-row items-center gap-4 bg-muted px-6 py-2.5 md:flex md:px-4">
-        <Text className="w-16 text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="w-16 font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
           Date
         </Text>
-        <Text className="flex-1 text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="flex-1 font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
           Description
         </Text>
-        <Text className="w-[150px] text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="w-[150px] font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
           Bank account
         </Text>
-        <Text className="w-[130px] text-right text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="w-[130px] text-right font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
           Amount
         </Text>
-        <Text className="w-[170px] text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+        <Text className="w-[170px] font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
           Status
         </Text>
         <View style={{ width: 16 }} />

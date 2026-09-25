@@ -5,7 +5,6 @@ import { NAV_THEME } from '@/lib/theme';
 import { PortalHost } from '@rn-primitives/portal';
 import {
   Geist_400Regular,
-  Geist_500Medium,
   Geist_600SemiBold,
   Geist_700Bold,
   useFonts,
@@ -29,7 +28,6 @@ export default function RootLayout() {
   // since there's no server standing by to re-render once the async font load resolves.
   useFonts({
     Geist_400Regular,
-    Geist_500Medium,
     Geist_600SemiBold,
     Geist_700Bold,
   });

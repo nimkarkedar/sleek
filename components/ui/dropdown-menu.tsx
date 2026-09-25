@@ -42,10 +42,10 @@ function DropdownMenuContent({
             <TextClassContext.Provider value="text-popover-foreground">
               <DropdownMenuPrimitive.Content
                 className={cn(
-                  'bg-popover border-border min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-lg shadow-black/5',
+                  'min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg shadow-black/5',
                   Platform.select({
                     web: cn(
-                      'animate-in fade-in-0 zoom-in-95 z-50 cursor-default',
+                      'z-50 cursor-default animate-in fade-in-0 zoom-in-95',
                       props.side === 'bottom' && 'slide-in-from-top-2',
                       props.side === 'top' && 'slide-in-from-bottom-2'
                     ),
@@ -81,10 +81,10 @@ function DropdownMenuItem({
       )}>
       <DropdownMenuPrimitive.Item
         className={cn(
-          'active:bg-accent group relative flex flex-row items-center gap-2 rounded-sm px-2 py-2 sm:py-1.5',
+          'group relative flex flex-row items-center gap-2 rounded-sm px-2 py-2 active:bg-accent sm:py-1.5',
           Platform.select({
             web: cn(
-              'focus:bg-accent focus:text-accent-foreground cursor-default outline-none data-[disabled]:pointer-events-none',
+              'cursor-default outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none',
               variant === 'destructive' && 'focus:bg-destructive/10 dark:focus:bg-destructive/20'
             ),
           }),
@@ -111,7 +111,7 @@ function DropdownMenuLabel({
   return (
     <DropdownMenuPrimitive.Label
       className={cn(
-        'text-foreground px-2 py-2 font-plex-medium text-sm sm:py-1.5',
+        'px-2 py-2 font-plex-semibold text-sm text-foreground sm:py-1.5',
         inset && 'pl-8',
         className
       )}
@@ -126,7 +126,7 @@ function DropdownMenuSeparator({
 }: DropdownMenuPrimitive.SeparatorProps & React.RefAttributes<DropdownMenuPrimitive.SeparatorRef>) {
   return (
     <DropdownMenuPrimitive.Separator
-      className={cn('bg-border -mx-1 my-1 h-px', className)}
+      className={cn('-mx-1 my-1 h-px bg-border', className)}
       {...props}
     />
   );
@@ -135,7 +135,7 @@ function DropdownMenuSeparator({
 function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<typeof Text>) {
   return (
     <Text
-      className={cn('text-muted-foreground ml-auto text-xs tracking-widest', className)}
+      className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)}
       {...props}
     />
   );

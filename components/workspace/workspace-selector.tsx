@@ -28,7 +28,7 @@ export function CompanyAvatar({ company, size = 34 }: { company: Company; size?:
     <View
       style={{ width: size, height: size, backgroundColor: company.logoColor ?? '#18181B' }}
       className="items-center justify-center rounded-lg">
-      <Text className="text-xs font-plex-semibold text-white">{company.initial}</Text>
+      <Text className="font-plex-semibold text-xs text-white">{company.initial}</Text>
     </View>
   );
 }
@@ -65,7 +65,7 @@ function PickerRow({
         isSelected ? 'bg-[#F0F0F1]' : 'web:hover:bg-[#F5F5F5]'
       )}>
       {avatar}
-      <Text numberOfLines={1} className="flex-1 text-sm font-plex-medium text-[#18181B]">
+      <Text numberOfLines={1} className="flex-1 text-sm text-[#18181B]">
         {label}
       </Text>
       {isSelected && <Icon as={Check} size={16} className="text-brand" />}
@@ -73,7 +73,13 @@ function PickerRow({
   );
 }
 
-function SearchField({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
+function SearchField({
+  value,
+  onChangeText,
+}: {
+  value: string;
+  onChangeText: (v: string) => void;
+}) {
   return (
     <View className="flex-row items-center gap-2.5 rounded-lg bg-[#F4F4F5] px-3.5 py-3">
       <Icon as={Search} size={16} className="text-[#656565]" />
@@ -192,7 +198,7 @@ export function WorkspaceSelector({
         ) : (
           <CompanyAvatar company={selectedCompany ?? companies[0]} size={34} />
         )}
-        <Text numberOfLines={1} className="text-sm font-plex-semibold text-[#18181B]">
+        <Text numberOfLines={1} className="font-plex-semibold text-sm text-[#18181B]">
           {triggerLabel}
         </Text>
         {/* Pinned to the box's right edge (not just trailing the label) so extra width — e.g.
@@ -231,7 +237,7 @@ export function WorkspaceSelector({
               <View className="h-1 w-10 rounded-full bg-[#E4E4E7]" />
             </View>
             <View className="flex-row items-center justify-between px-6 pb-4">
-              <Text className="text-lg font-plex-semibold text-[#18181B]">Switch workspace</Text>
+              <Text className="font-plex-bold text-lg text-[#18181B]">Switch workspace</Text>
               <Pressable
                 onPress={close}
                 accessibilityRole="button"
@@ -244,7 +250,9 @@ export function WorkspaceSelector({
             <View className="px-6 pb-4">
               <SearchField value={query} onChangeText={setQuery} />
             </View>
-            <ScrollView contentContainerClassName="gap-1 px-4 pb-6" keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerClassName="gap-1 px-4 pb-6"
+              keyboardShouldPersistTaps="handled">
               {list}
             </ScrollView>
           </View>

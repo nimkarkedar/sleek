@@ -1,9 +1,10 @@
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { type Company } from '@/lib/companies';
-import { ArrowRight, Lightbulb, X } from 'lucide-react-native';
+import { ArrowRight, Sparkles, X } from 'lucide-react-native';
 import * as React from 'react';
-import { Pressable, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 /**
  * "While you were away" summary — replaces the old profit/loss headline. Deliberately NOT
@@ -72,6 +73,119 @@ function buildSummary(companyName: string): { count: number; description: string
   return { count, description };
 }
 
+const SWEEP_MS = 1800;
+const SWEEP_PAUSE_MS = 3200;
+const BAND_WIDTH = 220;
+
+/** Honors the OS "reduce motion" setting — the banner stays fully static when it's on. */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = React.useState(false);
+  React.useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduced)
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
+    return () => sub.remove();
+  }, []);
+  return reduced;
+}
+
+/** Soft diagonal highlight that sweeps across the banner every few seconds — the "Sleek was
+ * quietly at work" magic cue. Its own absolutely-positioned, clipped layer (rather than
+ * `overflow-hidden` on the banner) because the dismiss button deliberately hangs outside the
+ * banner's corner and would get clipped too. */
+function Shimmer({ width }: { width: number }) {
+  const progress = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!width) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(progress, {
+          toValue: 1,
+          duration: SWEEP_MS,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.delay(SWEEP_PAUSE_MS),
+        Animated.timing(progress, { toValue: 0, duration: 0, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [width, progress]);
+
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-BAND_WIDTH * 1.5, width + BAND_WIDTH * 0.5],
+  });
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { borderRadius: 16, overflow: 'hidden' }]}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: -20,
+          bottom: -20,
+          width: BAND_WIDTH,
+          transform: [{ translateX }, { skewX: '-20deg' }],
+        }}>
+        <Svg width="100%" height="100%">
+          <Defs>
+            <LinearGradient id="banner-shimmer" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={0.75} />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#banner-shimmer)" />
+        </Svg>
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Sparkles icon with a slow, gentle twinkle (breathing opacity + scale). */
+function TwinklingSparkles({ animate }: { animate: boolean }) {
+  const pulse = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!animate) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animate, pulse]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+        transform: [
+          { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.06] }) },
+        ],
+      }}>
+      <Icon as={Sparkles} size={20} className="text-[#18181B]" />
+    </Animated.View>
+  );
+}
+
 export function ActivityBanner({
   company,
   onNavigate,
@@ -91,6 +205,8 @@ export function ActivityBanner({
   // elsewhere in the shell would make the message flicker/change under the user while they're
   // still reading it.
   const summary = React.useMemo(() => buildSummary(company.name), [company.name]);
+  const reducedMotion = useReducedMotion();
+  const [width, setWidth] = React.useState(0);
 
   if (dismissed) return null;
 
@@ -98,11 +214,13 @@ export function ActivityBanner({
     // RN's default `position` is already 'relative' (unlike web's 'static'), so the absolutely
     // positioned close button below just works without extra styling here.
     <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{ backgroundColor: '#EEFBF3' }}
       className="flex-row items-center gap-3 rounded-2xl py-4 pl-5 pr-10">
-      <Icon as={Lightbulb} size={20} className="text-[#18181B]" />
+      {!reducedMotion && <Shimmer width={width} />}
+      <TwinklingSparkles animate={!reducedMotion} />
       <View className="flex-1 gap-0.5">
-        <Text className="text-base font-plex-semibold text-[#18181B]">
+        <Text className="font-plex-semibold text-base text-[#18181B]">
           {summary.count} actions completed while you were away
         </Text>
         <Text className="text-sm text-[#656565]">{summary.description}</Text>
@@ -111,7 +229,7 @@ export function ActivityBanner({
         onPress={() => onNavigate('ledger-adjustments')}
         accessibilityRole="link"
         className="flex-row items-center gap-1.5 web:cursor-pointer">
-        <Text className="hidden text-sm font-plex-semibold text-[#18181B] md:flex">
+        <Text className="hidden font-plex-semibold text-sm text-[#18181B] md:flex">
           View details
         </Text>
         <Icon as={ArrowRight} size={14} className="text-[#18181B]" />

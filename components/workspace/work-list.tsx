@@ -331,7 +331,7 @@ function TodoRow({ todo, isLast, onNavigate }: TodoRowProps) {
           desktop. flex-1 so it absorbs whatever width the icon doesn't take. */}
       <View className="flex-1 gap-3 md:flex-row md:items-center md:gap-4">
         <View className="flex-1">
-          <Text className="text-base font-plex-semibold text-[#18181B]">{todo.title}</Text>
+          <Text className="text-base text-[#18181B]">{todo.title}</Text>
           {/* The human "why" — desktop only. Mobile already stacks title / due+countdown / CTA
               as three separate rows; adding a fourth (this) made the card too tall — the title
               alone carries enough context there.
@@ -355,7 +355,7 @@ function TodoRow({ todo, isLast, onNavigate }: TodoRowProps) {
           <Text className="text-sm text-[#656565] md:hidden">·</Text>
           <Text
             style={{ color: dueCountdownColor(todo.dueInDays) }}
-            className="text-sm font-plex-semibold">
+            className="font-plex-semibold text-sm">
             {dueCountdown(todo.dueInDays)}
           </Text>
         </View>
@@ -369,7 +369,7 @@ function TodoRow({ todo, isLast, onNavigate }: TodoRowProps) {
             size="sm"
             className="self-start"
             onPress={() => onNavigate(todo.targetKey, todo.targetTab)}>
-            <Text className="text-sm font-plex-medium">{todo.ctaLabel}</Text>
+            <Text className="font-plex-semibold text-sm">{todo.ctaLabel}</Text>
             <Icon as={ArrowRight} size={14} />
           </Button>
         </View>
@@ -400,7 +400,7 @@ export function WorkList({ role, company, onNavigate, showHeading }: WorkListPro
   return (
     <View className="gap-5">
       {showHeading && (
-        <Text className="text-xl font-plex-bold tracking-tight text-[#18181B]">
+        <Text className="font-plex-bold text-xl tracking-tight text-[#18181B]">
           To do for the day
         </Text>
       )}

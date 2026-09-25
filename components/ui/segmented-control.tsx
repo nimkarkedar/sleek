@@ -52,7 +52,7 @@ export function SegmentedControl({
             )}>
             <Text
               className={cn(
-                'text-sm font-plex-medium',
+                'font-plex-semibold text-sm',
                 active ? 'text-white' : 'text-muted-foreground'
               )}>
               {option.label}
@@ -65,7 +65,7 @@ export function SegmentedControl({
                 )}>
                 <Text
                   className={cn(
-                    'text-xs font-plex-bold',
+                    'font-plex-semibold text-xs',
                     active ? 'text-[#18181B]' : 'text-muted-foreground'
                   )}>
                   {option.count}

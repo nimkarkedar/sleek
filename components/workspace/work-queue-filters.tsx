@@ -62,7 +62,7 @@ function FilterOptionRow({
       <Text
         className={cn(
           'flex-1 text-sm',
-          selected ? 'font-plex-bold text-foreground' : 'font-plex-medium text-foreground'
+          selected ? 'font-plex-semibold text-foreground' : 'font-plex-regular text-foreground'
         )}>
         {label}
       </Text>
@@ -111,7 +111,7 @@ function StatusFilterDropdown({
         <View
           style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: filterColor(value) }}
         />
-        <Text className="text-sm font-plex-semibold text-foreground">{filterLabel(value)}</Text>
+        <Text className="font-plex-semibold text-sm text-foreground">{filterLabel(value)}</Text>
         {value === 'needs-attention' && (
           <Text className="text-sm text-muted-foreground">{totalCount}</Text>
         )}
@@ -134,7 +134,7 @@ function StatusFilterDropdown({
               zIndex: 50,
             }}
             className="gap-0.5 rounded-2xl border border-border bg-white p-2 shadow-lg">
-            <Text className="px-3 pb-1 pt-2 text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+            <Text className="px-3 pb-1 pt-2 font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
               Needs you
             </Text>
             <FilterOptionRow
@@ -153,7 +153,7 @@ function StatusFilterDropdown({
               />
             ))}
             <View className="my-1 border-t border-border" />
-            <Text className="px-3 pb-1 pt-2 text-xs font-plex-semibold uppercase tracking-wide text-muted-foreground">
+            <Text className="px-3 pb-1 pt-2 font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground">
               Waiting on us
             </Text>
             {WAITING_ON_US_STATUSES.map((status) => (
@@ -181,14 +181,23 @@ function StatusFilterDropdown({
   );
 }
 
-function SearchBox({ value, onChangeText }: { value: string; onChangeText: (v: string) => void }) {
+/** Shared by the Work Queue and Reports filter bars. */
+export function SearchBox({
+  value,
+  onChangeText,
+  placeholder = 'Search transactions',
+}: {
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder?: string;
+}) {
   return (
     <View className="min-w-0 flex-1 flex-row items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 md:min-w-[220px] md:flex-none">
       <Icon as={Search} size={16} className="text-muted-foreground" />
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder="Search transactions"
+        placeholder={placeholder}
         placeholderTextColor="#9A9A9A"
         className="flex-1 font-sans text-sm text-foreground web:outline-none"
         style={Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined}

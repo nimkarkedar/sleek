@@ -8,6 +8,7 @@ import {
 import { WorkList } from '@/components/workspace/work-list';
 import { PlaceholderCard, TabbedPlaceholderPage } from '@/components/workspace/page-tabs';
 import { DEMO_MODE, PersonaSwitcher } from '@/components/workspace/persona-switcher';
+import { ReportsPage } from '@/components/workspace/reports-page';
 import { WorkQueuePage } from '@/components/workspace/transactions-table';
 import { CompanyAvatar, WorkspaceSelector } from '@/components/workspace/workspace-selector';
 import { Chevron, NavigationIcon } from '@/components/icons/nav-icons';
@@ -307,7 +308,7 @@ export default function AppShellScreen() {
                 fixed once here instead of each page individually nudging its own card over to
                 compensate. Right side unchanged: md:pr-4 already matched the title row's own
                 right inset. */}
-              <View className="w-full max-w-[1280px] p-0 md:py-4 md:pl-8 md:pr-4">
+              <View className="w-full max-w-[1280px] p-0 pb-16 md:pb-20 md:pl-8 md:pr-4 md:pt-4">
                 {/* Dashboard gets the shared padded white "foreground" card — everything else
                   (nav, header) sits on the gray canvas; this is the one surface that pops
                   forward, giving the page a layered look instead of one flat plane. Mobile
@@ -363,15 +364,23 @@ export default function AppShellScreen() {
                     key={active}
                     tabs={activeNode.children}
                     stickyOffset={titleRowHeight}
+                    initialTab={workQueueInitialTab}
                   />
                 )}
                 {/* Placeholder for every other nav destination (Ledger's sub-items, Clients) —
                   none of these have real content built yet. Without this, landing on one is
                   just a title over empty gray canvas, which reads as "did my click even do
                   anything?" rather than "this page isn't designed yet." */}
-                {active !== 'home' && activeNode?.kind !== 'tabs' && (
-                  <PlaceholderCard title={activeLabel} />
+                {active === 'ledger-reports' && (
+                  <ReportsPage
+                    period={period}
+                    stickyOffset={titleRowHeight}
+                    onNavigate={navigate}
+                  />
                 )}
+                {active !== 'home' &&
+                  active !== 'ledger-reports' &&
+                  activeNode?.kind !== 'tabs' && <PlaceholderCard title={activeLabel} />}
               </View>
             </ScrollEndProvider>
           </ScrollView>
@@ -517,14 +526,14 @@ function NavList({
           <Text
             className={cn(
               'text-base',
-              isActive ? 'font-plex-bold text-brand' : 'font-plex-medium text-[#3F3F46]'
+              isActive ? 'font-plex-semibold text-brand' : 'font-plex-regular text-[#3F3F46]'
             )}>
             {item.label}
           </Text>
           <View className="ml-auto flex-row items-center gap-2">
             {!!badges?.[item.key] && (
               <View className="h-6 min-w-[24px] items-center justify-center rounded-full bg-[#18181B] px-1.5">
-                <Text className="font-plex-bold text-xs text-white">{badges[item.key]}</Text>
+                <Text className="font-plex-semibold text-xs text-white">{badges[item.key]}</Text>
               </View>
             )}
             {hasSubItems && (
@@ -553,7 +562,7 @@ function NavList({
                 <Text
                   className={cn(
                     'text-sm',
-                    subActive ? 'font-plex-bold text-brand' : 'font-plex-medium text-[#3F3F46]'
+                    subActive ? 'font-plex-semibold text-brand' : 'font-plex-regular text-[#3F3F46]'
                   )}>
                   {sub.label}
                 </Text>

@@ -28,7 +28,7 @@ function SelectValue({
     <SelectPrimitive.Value
       ref={ref}
       className={cn(
-        'text-foreground line-clamp-1 flex flex-row items-center gap-2 font-sans text-sm',
+        'line-clamp-1 flex flex-row items-center gap-2 font-sans text-sm text-foreground',
         !value && 'text-muted-foreground',
         className
       )}
@@ -59,9 +59,9 @@ function SelectTrigger({
         Platform.select({
           web: cn('font-sans', value ? 'text-foreground' : 'text-muted-foreground'),
         }),
-        'border-input dark:bg-input/30 dark:active:bg-input/50 bg-background flex h-10 flex-row items-center justify-between gap-2 rounded-md border px-3 py-2 shadow-sm shadow-black/5 sm:h-9',
+        'flex h-10 flex-row items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 shadow-sm shadow-black/5 dark:bg-input/30 dark:active:bg-input/50 sm:h-9',
         Platform.select({
-          web: 'focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:hover:bg-input/50 w-fit whitespace-nowrap text-sm outline-none transition-[color,box-shadow] focus-visible:ring-[3px] disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:shrink-0',
+          web: 'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive w-fit whitespace-nowrap text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed dark:hover:bg-input/50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
         }),
         props.disabled && 'opacity-50',
         // See Input — `aria-invalid:` is a Tailwind v4 variant, so key the border off the prop.
@@ -71,7 +71,7 @@ function SelectTrigger({
       )}
       {...props}>
       <>{children}</>
-      <Icon as={ChevronDown} aria-hidden={true} className="text-muted-foreground size-4" />
+      <Icon as={ChevronDown} aria-hidden={true} className="size-4 text-muted-foreground" />
     </SelectPrimitive.Trigger>
   );
 }
@@ -97,10 +97,10 @@ function SelectContent({
             <NativeOnlyAnimatedView className="z-50" entering={FadeIn} exiting={FadeOut}>
               <SelectPrimitive.Content
                 className={cn(
-                  'bg-popover border-border relative z-50 min-w-[8rem] rounded-md border shadow-md shadow-black/5',
+                  'relative z-50 min-w-[8rem] rounded-md border border-border bg-popover shadow-md shadow-black/5',
                   Platform.select({
                     web: cn(
-                      'animate-in fade-in-0 zoom-in-95 max-h-96overflow-y-auto overflow-x-hidden',
+                      'max-h-96overflow-y-auto overflow-x-hidden animate-in fade-in-0 zoom-in-95',
                       props.side === 'bottom' && 'slide-in-from-top-2',
                       props.side === 'top' && 'slide-in-from-bottom-2'
                     ),
@@ -151,7 +151,7 @@ function SelectLabel({
   return (
     <SelectPrimitive.Label
       className={cn(
-        'text-muted-foreground px-2 py-2 font-plex-medium text-xs sm:py-1.5',
+        'px-2 py-2 font-plex-semibold text-xs text-muted-foreground sm:py-1.5',
         className
       )}
       {...props}
@@ -167,9 +167,9 @@ function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        'active:bg-accent group relative flex w-full flex-row items-center gap-2 rounded-sm py-2 pl-2 pr-8 sm:py-1.5',
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-2 pl-2 pr-8 active:bg-accent sm:py-1.5',
         Platform.select({
-          web: 'focus:bg-accent focus:text-accent-foreground cursor-default outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none',
+          web: 'cursor-default outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none',
         }),
         props.disabled && 'opacity-50',
         className
@@ -177,10 +177,10 @@ function SelectItem({
       {...props}>
       <View className="absolute right-2 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <Icon as={Check} className="text-muted-foreground size-4 shrink-0" />
+          <Icon as={Check} className="size-4 shrink-0 text-muted-foreground" />
         </SelectPrimitive.ItemIndicator>
       </View>
-      <SelectPrimitive.ItemText className="text-foreground group-active:text-accent-foreground select-none font-sans text-sm" />
+      <SelectPrimitive.ItemText className="select-none font-sans text-sm text-foreground group-active:text-accent-foreground" />
     </SelectPrimitive.Item>
   );
 }
@@ -192,7 +192,7 @@ function SelectSeparator({
   return (
     <SelectPrimitive.Separator
       className={cn(
-        'bg-border -mx-1 my-1 h-px',
+        '-mx-1 my-1 h-px bg-border',
         Platform.select({ web: 'pointer-events-none' }),
         className
       )}

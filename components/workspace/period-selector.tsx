@@ -17,8 +17,7 @@ const MOBILE_BREAKPOINT = 768;
 export type PeriodPreset = 'current-year' | 'last-quarter' | 'last-half-year' | 'previous-year';
 
 export type Period =
-  | { kind: 'preset'; preset: PeriodPreset }
-  | { kind: 'custom'; from: string; to: string };
+  { kind: 'preset'; preset: PeriodPreset } | { kind: 'custom'; from: string; to: string };
 
 export const DEFAULT_PERIOD: Period = { kind: 'preset', preset: 'current-year' };
 
@@ -155,7 +154,7 @@ function CalendarMonth({
           className="items-center justify-center rounded-md p-1 web:cursor-pointer web:hover:bg-[#F5F5F5]">
           <Icon as={ChevronLeft} size={16} className="text-[#656565]" />
         </Pressable>
-        <Text className="text-sm font-plex-semibold text-[#18181B]">
+        <Text className="font-plex-semibold text-sm text-[#18181B]">
           {visibleMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
         </Text>
         <Pressable
@@ -171,7 +170,7 @@ function CalendarMonth({
       <View className="flex-row">
         {WEEKDAY_LABELS.map((w, i) => (
           <View key={`${w}-${i}`} className="flex-1 items-center py-1">
-            <Text className="text-[11px] font-plex-medium text-[#9A9A9A]">{w}</Text>
+            <Text className="text-[11px] text-[#9A9A9A]">{w}</Text>
           </View>
         ))}
       </View>
@@ -205,7 +204,7 @@ function CalendarMonth({
                       isEndpoint
                         ? 'font-plex-semibold text-white'
                         : isToday
-                          ? 'font-plex-bold text-brand'
+                          ? 'font-plex-semibold text-brand'
                           : 'text-[#18181B]'
                     )}>
                     {day.getDate()}
@@ -218,6 +217,21 @@ function CalendarMonth({
       ))}
     </View>
   );
+}
+
+/** Start/end dates of whatever period is selected — for pages that label their own data by it
+ * (e.g. Reports' "Apr 2026 – Mar 2027" / "As at 31 Mar 2027"). An incomplete custom range falls
+ * back to the current financial year. */
+export function periodRange(period: Period, today: Date = new Date()): { start: Date; end: Date } {
+  if (period.kind === 'custom') {
+    const start = new Date(period.from);
+    const end = new Date(period.to);
+    if (period.from && period.to && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      return { start, end };
+    }
+    return presetRange('current-year', today);
+  }
+  return presetRange(period.preset, today);
 }
 
 export function periodTriggerLabel(period: Period, today: Date = new Date()): string {
@@ -322,7 +336,7 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
               'flex-row items-center gap-3 rounded-lg px-3 py-3 web:cursor-pointer',
               isSelected ? 'bg-[#F0F0F1]' : 'web:hover:bg-[#F5F5F5]'
             )}>
-            <Text numberOfLines={1} className="flex-1 text-sm font-plex-medium text-[#18181B]">
+            <Text numberOfLines={1} className="flex-1 text-sm text-[#18181B]">
               {presetRowLabel(preset, today)}
             </Text>
             {isSelected && <Icon as={Check} size={16} className="text-brand" />}
@@ -335,7 +349,7 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
           'flex-row items-center gap-3 rounded-lg px-3 py-3 web:cursor-pointer',
           period.kind === 'custom' ? 'bg-[#F0F0F1]' : 'web:hover:bg-[#F5F5F5]'
         )}>
-        <Text numberOfLines={1} className="flex-1 text-sm font-plex-medium text-[#18181B]">
+        <Text numberOfLines={1} className="flex-1 text-sm text-[#18181B]">
           Custom date range
         </Text>
         {period.kind === 'custom' && <Icon as={Check} size={16} className="text-brand" />}
@@ -350,9 +364,9 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
           onPress={() => setView('list')}
           className="flex-row items-center gap-1.5 py-1 web:cursor-pointer">
           <Icon as={ChevronLeft} size={14} className="text-[#656565]" />
-          <Text className="text-xs font-plex-medium text-[#656565]">Back</Text>
+          <Text className="text-xs text-[#656565]">Back</Text>
         </Pressable>
-        <Text className="text-xs font-plex-medium text-[#656565]">
+        <Text className="text-xs text-[#656565]">
           {customFrom ? formatDateInput(customFrom) : 'Start date'}
           {'  →  '}
           {customTo ? formatDateInput(customTo) : 'End date'}
@@ -360,12 +374,8 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
       </View>
       <CalendarMonth
         visibleMonth={visibleMonth}
-        onPrevMonth={() =>
-          setVisibleMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))
-        }
-        onNextMonth={() =>
-          setVisibleMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))
-        }
+        onPrevMonth={() => setVisibleMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+        onNextMonth={() => setVisibleMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
         from={fromISODate(customFrom)}
         to={fromISODate(customTo)}
         onSelectDay={handleSelectDay}
@@ -379,7 +389,7 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
         )}>
         <Text
           className={cn(
-            'text-sm font-plex-semibold',
+            'font-plex-semibold text-sm',
             customFrom && customTo ? 'text-white' : 'text-[#9A9A9A]'
           )}>
           Apply
@@ -400,7 +410,7 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
         // *total* target box height, not just the avatar size, to actually match them.
         style={[CHIP_STYLE, { minHeight: 50 }, hovered && CHIP_HOVER_STYLE]}
         className={cn(CHIP_CLASS, className)}>
-        <Text numberOfLines={1} className="text-sm font-plex-semibold text-[#18181B]">
+        <Text numberOfLines={1} className="font-plex-semibold text-sm text-[#18181B]">
           {periodTriggerLabel(period, today)}
         </Text>
         {/* Pinned to the box's right edge (not just trailing the label) so extra width — e.g.
@@ -439,11 +449,13 @@ export function PeriodSelector({ period, onPeriodChange, className }: PeriodSele
               <View className="h-1 w-10 rounded-full bg-[#E4E4E7]" />
             </View>
             <View className="flex-row items-center justify-between px-6 pb-4">
-              <Text className="text-lg font-plex-semibold text-[#18181B]">
+              <Text className="font-plex-bold text-lg text-[#18181B]">
                 {view === 'list' ? 'Select period' : 'Custom date range'}
               </Text>
             </View>
-            <ScrollView contentContainerClassName="gap-1 px-4 pb-6" keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerClassName="gap-1 px-4 pb-6"
+              keyboardShouldPersistTaps="handled">
               {view === 'list' ? listContent : customContent}
             </ScrollView>
           </View>

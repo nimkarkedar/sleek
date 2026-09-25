@@ -10,10 +10,17 @@ module.exports = {
       // Geist (Google Fonts), loaded via @expo-google-fonts/geist + useFonts in app/_layout.tsx —
       // each weight registers under its own family name (e.g. "Geist_400Regular"), same pattern
       // this project used for IBM Plex Sans before the brief Segoe UI system-font detour.
+      //
+      // WEIGHT SCALE — three weights only; Medium (500) is deliberately not available.
+      //   font-sans / font-plex-regular (400) — the default: body copy, table cells, list and
+      //     menu items, inactive nav, links, status pills.
+      //   font-plex-semibold (600) — emphasis: buttons, tabs, active nav, table column
+      //     headers, section rows, totals, amounts.
+      //   font-plex-bold (700) — headings only: page titles, card/dialog headings, headline
+      //     stat figures.
       fontFamily: {
         sans: ['Geist_400Regular', 'system-ui', '-apple-system', 'sans-serif'],
         'plex-regular': ['Geist_400Regular', 'system-ui', '-apple-system', 'sans-serif'],
-        'plex-medium': ['Geist_500Medium', 'system-ui', '-apple-system', 'sans-serif'],
         'plex-semibold': ['Geist_600SemiBold', 'system-ui', '-apple-system', 'sans-serif'],
         'plex-bold': ['Geist_700Bold', 'system-ui', '-apple-system', 'sans-serif'],
       },
