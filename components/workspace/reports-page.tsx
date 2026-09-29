@@ -48,12 +48,13 @@ import {
   ChevronRight,
   CircleAlert,
   Inbox,
+  Monitor,
   Pencil,
   SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react-native';
 import * as React from 'react';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import { Pressable, useWindowDimensions, View, type ViewStyle } from 'react-native';
 
 const STATUS_TONE: Record<Tone, { color: string; icon: LucideIcon }> = {
   success: { color: TONE_HEX.success, icon: Check },
@@ -268,6 +269,11 @@ export function ReportsPage({
     });
   }
 
+  // Reports is built for a wide screen (two panels, wide statements) — phones get a message
+  // instead of a squeezed version. Same breakpoint as the shell's mobile layout.
+  const isPhone = useWindowDimensions().width < 768;
+  if (isPhone) return <DesktopOnly />;
+
   const openReport = REPORT_SECTIONS.flatMap((s) => s.reports).find((r) => r.key === openKey);
   const showSetupHint = firstRun && tab !== 'templates';
 
@@ -414,6 +420,22 @@ export function ReportsPage({
         }}
       />
     </PanelStickyTop.Provider>
+  );
+}
+
+function DesktopOnly() {
+  return (
+    <View className={cn(CARD_CLASS, 'items-center gap-3 px-6 py-20')}>
+      <View className="h-12 w-12 items-center justify-center rounded-full bg-muted">
+        <Icon as={Monitor} size={22} className="text-muted-foreground" />
+      </View>
+      <Text className="text-center font-plex-semibold text-lg text-foreground">
+        Reports is only on desktop
+      </Text>
+      <Text className="text-center text-sm text-muted-foreground">
+        Open SleekOne on a computer to view, prepare and send reports.
+      </Text>
+    </View>
   );
 }
 
