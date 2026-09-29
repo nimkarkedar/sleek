@@ -16,17 +16,15 @@ import {
   type RowLink,
   type Tone,
 } from '@/components/workspace/report-data';
-import { TONE_HEX } from '@/lib/tone';
-import { cn } from '@/lib/utils';
 import {
-  ArrowLeft,
-  Check,
-  CircleAlert,
-  Download,
-  Inbox,
-  Plus,
-  type LucideIcon,
-} from 'lucide-react-native';
+  PanelBackLink,
+  PanelNavItem,
+  PanelNavSection,
+  TwoPanel,
+} from '@/components/workspace/panel-nav';
+import { MUTED_HEX, TONE_HEX, WARNING_HEX } from '@/lib/tone';
+import { cn } from '@/lib/utils';
+import { Check, CircleAlert, Download, Inbox, Lock, Plus, type LucideIcon } from 'lucide-react-native';
 import * as React from 'react';
 import { Pressable, ScrollView, View, useWindowDimensions, type TextStyle } from 'react-native';
 
@@ -38,8 +36,8 @@ export type ReportNavSection = {
 
 const TONE: Record<Tone, { color: string; icon: LucideIcon }> = {
   success: { color: TONE_HEX.success, icon: Check },
-  warning: { color: '#D97706', icon: CircleAlert },
-  neutral: { color: '#656565', icon: CircleAlert },
+  warning: { color: WARNING_HEX, icon: CircleAlert },
+  neutral: { color: MUTED_HEX, icon: CircleAlert },
 };
 
 // Aligned figures — digits share one width so columns of numbers line up.
@@ -52,14 +50,6 @@ function formatCell(value: number | string | null): string {
   if (typeof value === 'string') return value;
   const abs = Math.abs(value).toLocaleString('en-US');
   return value < 0 ? `(${abs})` : abs;
-}
-
-/** The month the last client report went out — the one before this. */
-function lastMonthName(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return d.toLocaleDateString('en-GB', { month: 'long' });
 }
 
 function longDate(d: Date): string {
@@ -89,12 +79,13 @@ export function ReportDetailView({
   sections,
   period,
   ledgerAccount,
-  addedToClient,
+  inTemplate,
+  lastSent,
   onSelectReport,
   onBack,
   onOpenAccount,
   onNavigate,
-  onAddToClient,
+  onToggleTemplate,
 }: {
   reportKey: string;
   reportName: string;
@@ -102,12 +93,16 @@ export function ReportDetailView({
   period: Period;
   /** Which account the General ledger shows. */
   ledgerAccount: string;
-  addedToClient: boolean;
+  /** Whether this report is in the management accounts template; `null` when the client has no
+   * templates yet (nothing to add it to). */
+  inTemplate: boolean | null;
+  /** The latest sent management accounts, whose locked figures can be shown instead of live. */
+  lastSent: { name: string; lockedOn: string } | null;
   onSelectReport: (key: string) => void;
   onBack: () => void;
   onOpenAccount: (code: string) => void;
   onNavigate: (targetKey: string, targetTab?: string) => void;
-  onAddToClient: () => void;
+  onToggleTemplate: () => void;
 }) {
   const toast = useToast();
   const [compare, setCompare] = React.useState<'prior-year' | 'none'>('prior-year');
@@ -117,6 +112,7 @@ export function ReportDetailView({
   const detail = isLedger ? buildLedgerDetail(ledgerAccount, period) : REPORT_DETAILS[reportKey];
   if (!detail) return null;
   const showPrior = !!detail.comparable && compare === 'prior-year';
+  const locked = figures === 'sent' && lastSent;
 
   function handleLink(link: RowLink) {
     if (link.kind === 'account') onOpenAccount(link.code);
@@ -125,23 +121,27 @@ export function ReportDetailView({
   }
 
   return (
-    <View className="bg-white md:flex-row md:rounded-3xl md:border md:border-[#E4E4E7] md:shadow-sm md:shadow-black/5">
-      <ReportNav
-        sections={sections}
-        activeKey={reportKey}
-        onSelect={onSelectReport}
-        onBack={onBack}
-      />
-
-      <View className="min-w-0 flex-1 gap-6 p-6 md:p-8">
+    <TwoPanel
+      nav={
+        <>
+          <PanelBackLink label="All reports" onPress={onBack} />
+          {sections.map((section, i) => (
+            <PanelNavSection key={section.key} label={section.label} first={i === 0}>
+              {section.reports.map((report) => (
+                <PanelNavItem
+                  key={report.key}
+                  label={report.name}
+                  active={report.key === reportKey}
+                  onPress={() => onSelectReport(report.key)}
+                />
+              ))}
+            </PanelNavSection>
+          ))}
+        </>
+      }>
+      <View className="gap-6 p-6 md:p-8">
         {/* Mobile has no side list, so the way back sits above the title instead. */}
-        <Pressable
-          onPress={onBack}
-          accessibilityRole="link"
-          className="flex-row items-center gap-2 self-start web:cursor-pointer md:hidden">
-          <Icon as={ArrowLeft} size={16} className="text-foreground" />
-          <Text className="font-plex-semibold text-base text-foreground">All reports</Text>
-        </Pressable>
+        <PanelBackLink label="All reports" onPress={onBack} className="-ml-3 md:hidden" />
 
         <View className="gap-1">
           <Text variant="h3">{reportName}</Text>
@@ -162,15 +162,17 @@ export function ReportDetailView({
               onValueChange={(v) => setCompare(v as typeof compare)}
             />
           )}
-          <ToolbarSelect
-            label="Figures"
-            value={figures}
-            options={[
-              { value: 'live', label: 'Live' },
-              { value: 'sent', label: `As sent in ${lastMonthName()} client report` },
-            ]}
-            onValueChange={(v) => setFigures(v as typeof figures)}
-          />
+          {lastSent && (
+            <ToolbarSelect
+              label="Figures"
+              value={figures}
+              options={[
+                { value: 'live', label: 'Live' },
+                { value: 'sent', label: `As sent in ${lastSent.name}` },
+              ]}
+              onValueChange={(v) => setFigures(v as typeof figures)}
+            />
+          )}
           <Button
             variant="outline"
             onPress={() =>
@@ -183,18 +185,26 @@ export function ReportDetailView({
             <Icon as={Download} size={16} />
             <Text>Export</Text>
           </Button>
-          {addedToClient ? (
-            <Button variant="outline" disabled>
-              <Icon as={Check} size={16} />
-              <Text>Added to client report</Text>
-            </Button>
-          ) : (
-            <Button onPress={onAddToClient}>
-              <Icon as={Plus} size={16} />
-              <Text>Add to client report</Text>
+          {inTemplate !== null && (
+            <Button variant={inTemplate ? 'secondary' : 'outline'} onPress={onToggleTemplate}>
+              <Icon
+                as={inTemplate ? Check : Plus}
+                size={16}
+                className={inTemplate ? 'text-success' : undefined}
+              />
+              <Text>{inTemplate ? 'In management accounts' : 'Add to management accounts'}</Text>
             </Button>
           )}
         </View>
+
+        {locked && (
+          <View className="flex-row items-center gap-2 rounded-lg bg-muted px-4 py-3">
+            <Icon as={Lock} size={16} className="text-muted-foreground" />
+            <Text className="text-sm text-muted-foreground">
+              Figures locked on {lastSent.lockedOn} in {lastSent.name}
+            </Text>
+          </View>
+        )}
 
         {isLedger && (
           <Text className="text-base text-muted-foreground">
@@ -216,7 +226,7 @@ export function ReportDetailView({
             columns={showPrior || !detail.comparable ? detail.columns : detail.columns.slice(0, -1)}
             rows={detail.rows}
             dropLastCell={!!detail.comparable && !showPrior}
-            period={period}
+            resolveLabel={(label) => resolveColumnLabel(label, period)}
             onLink={handleLink}
           />
         )}
@@ -230,12 +240,12 @@ export function ReportDetailView({
           </Button>
         )}
       </View>
-    </View>
+    </TwoPanel>
   );
 }
 
 /** General ledger for one account, built from its entries with a running balance. */
-function buildLedgerDetail(code: string, period: Period): ReportDetail {
+export function buildLedgerDetail(code: string, period: Period): ReportDetail {
   const data = LEDGER_ENTRIES[code];
   const { start } = periodRange(period);
   const dateLabel = (offset: number) => {
@@ -277,77 +287,26 @@ function buildLedgerDetail(code: string, period: Period): ReportDetail {
 // Pieces
 // ---------------------------------------------------------------------------------------------
 
-function ReportNav({
-  sections,
-  activeKey,
-  onSelect,
-  onBack,
-}: {
-  sections: ReportNavSection[];
-  activeKey: string;
-  onSelect: (key: string) => void;
-  onBack: () => void;
-}) {
-  return (
-    <View style={{ width: 260 }} className="hidden gap-1 border-r border-border p-4 md:flex">
-      <Pressable
-        onPress={onBack}
-        accessibilityRole="link"
-        className="flex-row items-center gap-2 rounded-lg px-3 py-2.5 web:cursor-pointer web:hover:bg-muted">
-        <Icon as={ArrowLeft} size={16} className="text-foreground" />
-        <Text className="font-plex-semibold text-base text-foreground">All reports</Text>
-      </Pressable>
-      {sections.map((section, i) => (
-        <View
-          key={section.key}
-          className={cn('gap-0.5 pt-3', i > 0 && 'mt-2 border-t border-border')}>
-          <Text className="px-3 pb-1 pt-1 text-sm text-muted-foreground">{section.label}</Text>
-          {section.reports.map((report) => {
-            const active = report.key === activeKey;
-            return (
-              <Pressable
-                key={report.key}
-                onPress={() => onSelect(report.key)}
-                accessibilityRole="link"
-                accessibilityState={{ selected: active }}
-                className={cn(
-                  'rounded-lg px-3 py-2.5 web:cursor-pointer',
-                  active ? 'bg-muted' : 'web:hover:bg-muted'
-                )}>
-                <Text
-                  className={cn(
-                    'text-base',
-                    active ? 'font-plex-semibold text-brand' : 'font-plex-regular text-foreground'
-                  )}>
-                  {report.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 /** shadcn Select whose trigger reads "<label>  <value>", e.g. "Compare  Prior year". */
-function ToolbarSelect({
+export function ToolbarSelect({
   label,
   value,
   options,
   onValueChange,
+  disabled,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onValueChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <Select
       value={{ value: current.value, label: current.label }}
       onValueChange={(o) => o && onValueChange(o.value)}>
-      <SelectTrigger aria-label={label} className="h-10 w-auto sm:h-10">
+      <SelectTrigger aria-label={label} disabled={disabled} className="h-10 w-auto sm:h-10">
         <View className="flex-row items-center gap-2 pr-1">
           <Text className="text-sm text-muted-foreground">{label}</Text>
           <Text className="font-plex-semibold text-sm text-foreground">{current.label}</Text>
@@ -362,19 +321,21 @@ function ToolbarSelect({
   );
 }
 
-function StatementTable({
+export function StatementTable({
   columns,
   rows,
   dropLastCell,
-  period,
+  resolveLabel = (label) => label,
   onLink,
 }: {
   columns: Column[];
   rows: Row[];
   /** Drop each row's last (prior-year) cell when comparison is off. */
   dropLastCell: boolean;
-  period: Period;
-  onLink: (link: RowLink) => void;
+  /** Turns a column label's placeholders (`{FY}`) into real headings. */
+  resolveLabel?: (label: string) => string;
+  /** Opens what a linked row points at. Without it (e.g. a pack preview) names are plain text. */
+  onLink?: (link: RowLink) => void;
 }) {
   // Wide tables (aged reports, the ledger) scroll sideways on a phone instead of squashing.
   // Desktop: columns share the width proportionally so every table fits the card. Phone: fixed
@@ -400,10 +361,10 @@ function StatementTable({
                 key={i}
                 style={colStyle(col, i)}
                 className={cn(
-                  'font-plex-semibold text-xs uppercase tracking-wide text-muted-foreground',
+                  'font-plex-semibold text-sm text-muted-foreground',
                   col.align === 'right' && 'text-right'
                 )}>
-                {resolveColumnLabel(col.label, period)}
+                {resolveLabel(col.label)}
               </Text>
             ))}
           </View>
@@ -414,8 +375,7 @@ function StatementTable({
               return (
                 <View
                   key={r}
-                  style={{ backgroundColor: '#FAFAFA' }}
-                  className="border-t border-border px-4 py-3">
+                  className="border-t border-border bg-muted px-4 py-3">
                   <Text className="font-plex-semibold text-base text-foreground">{row.label}</Text>
                 </View>
               );
@@ -437,7 +397,7 @@ function StatementTable({
                       {row.code}
                     </Text>
                   )}
-                  {row.kind === 'line' && row.link ? (
+                  {row.kind === 'line' && row.link && onLink ? (
                     <Pressable
                       onPress={() => onLink(row.link!)}
                       accessibilityRole="link"

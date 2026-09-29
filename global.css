@@ -30,6 +30,9 @@
     --radius: 0.625rem;
     --brand: 217 77% 54%;
     --brand-hover: 217 74% 45%;
+    --brand-subtle: 220 100% 97%;
+    --warning: 32 95% 44%;
+    --warning-text: 26 90% 37%;
   }
 
   .dark:root {
@@ -58,5 +61,8 @@
     --ring: 300 0% 45%;
     --brand: 217 77% 60%;
     --brand-hover: 217 74% 68%;
+    --brand-subtle: 217 40% 16%;
+    --warning: 32 95% 50%;
+    --warning-text: 32 90% 62%;
   }
 }

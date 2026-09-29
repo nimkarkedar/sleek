@@ -26,3 +26,8 @@ export const CHIP_HOVER_STYLE: ViewStyle = {
   shadowOpacity: 0.06,
   shadowRadius: 4,
 };
+
+/** The white foreground card pages sit in — flush edge to edge on mobile, a rounded bordered
+ * card from md up. */
+export const CARD_CLASS =
+  'bg-white md:rounded-3xl md:border md:border-border md:shadow-sm md:shadow-black/5';

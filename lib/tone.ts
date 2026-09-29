@@ -15,3 +15,10 @@ export const TONE_HEX: Record<Tone, string> = {
   success: '#1FA136',
   destructive: '#FB5E37',
 };
+
+/** "Needs a look" amber and muted grey as raw hex, for icon/pill color props. Keep in sync with
+ * the --warning and --muted-foreground CSS vars. */
+export const WARNING_HEX = '#D97706';
+export const MUTED_HEX = '#666666';
+/** Brand blue as a raw color — the `brand` Tailwind token is a CSS var, not usable as a prop. */
+export const BRAND_HEX = '#2D74E4';

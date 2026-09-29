@@ -67,6 +67,11 @@ module.exports = {
         brand: {
           DEFAULT: 'hsl(var(--brand))',
           hover: 'hsl(var(--brand-hover))',
+          subtle: 'hsl(var(--brand-subtle))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          text: 'hsl(var(--warning-text))',
         },
       },
       borderRadius: {

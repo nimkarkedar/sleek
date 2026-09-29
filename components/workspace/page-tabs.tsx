@@ -1,6 +1,7 @@
 import { SegmentedControl, type SegmentedControlOption } from '@/components/ui/segmented-control';
 import { Text } from '@/components/ui/text';
 import type { NavChild } from '@/lib/permissions';
+import { HEADER_SHADOW, useStickyTabsShadow } from '@/lib/sticky-header';
 import * as React from 'react';
 import { View, type ViewStyle } from 'react-native';
 
@@ -16,26 +17,37 @@ export function useVisibleTab(tabs: NavChild[], initialTab?: string) {
 }
 
 /** Tabs strip on the gray canvas, sticky right below the page title row. Opaque bg so content
- * scrolling underneath doesn't show through once it's pinned. */
+ * scrolling underneath doesn't show through once it's pinned. The bottom padding (not margin) is
+ * part of the sticky strip, so the card slides under a band of canvas rather than touching the
+ * tabs, and the strip casts the header's shadow once content is underneath. It bleeds out over
+ * the content wrapper's side padding (md:-ml-8 / md:-mr-4) so the shadow spans the column. */
 export function PageTabs({
   value,
   onValueChange,
   options,
   stickyOffset,
   onLayoutHeight,
+  trailing,
 }: {
   value: string;
   onValueChange: (value: string) => void;
   options: SegmentedControlOption[];
   stickyOffset: number;
   onLayoutHeight?: (height: number) => void;
+  /** Right-aligned on the same row — e.g. Reports' Templates tab. */
+  trailing?: React.ReactNode;
 }) {
+  const scrolled = useStickyTabsShadow();
   return (
     <View
       onLayout={(e) => onLayoutHeight?.(e.nativeEvent.layout.height)}
-      style={{ position: 'sticky', top: stickyOffset, zIndex: 9 } as ViewStyle}
-      className="mb-4 bg-[#F4F5FA] px-6 py-1 md:px-0">
+      style={[
+        { position: 'sticky', top: stickyOffset, zIndex: 9 } as ViewStyle,
+        scrolled && HEADER_SHADOW,
+      ]}
+      className="flex-row flex-wrap items-center justify-between gap-2 bg-[#F4F5FA] px-6 pb-4 pt-1 web:transition-shadow md:-ml-8 md:-mr-4 md:pl-8 md:pr-4">
       <SegmentedControl value={value} onValueChange={onValueChange} options={options} />
+      {trailing}
     </View>
   );
 }
@@ -69,7 +81,7 @@ export function TabbedPlaceholderPage({
 export function PlaceholderCard({ title }: { title: string }) {
   return (
     <View className="items-center gap-2 bg-white px-6 py-16 md:rounded-3xl md:border md:border-[#E4E4E7] md:shadow-sm md:shadow-black/5">
-      <Text className="text-base font-plex-semibold text-[#18181B]">{title}</Text>
+      <Text className="font-plex-semibold text-base text-[#18181B]">{title}</Text>
       <Text className="text-sm text-[#656565]">This page hasn't been designed yet.</Text>
     </View>
   );

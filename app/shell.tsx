@@ -8,7 +8,7 @@ import {
 import { WorkList } from '@/components/workspace/work-list';
 import { PlaceholderCard, TabbedPlaceholderPage } from '@/components/workspace/page-tabs';
 import { DEMO_MODE, PersonaSwitcher } from '@/components/workspace/persona-switcher';
-import { ReportsPage } from '@/components/workspace/reports-page';
+import { ReportsPage, type LeaveGuard } from '@/components/workspace/reports-page';
 import { WorkQueuePage } from '@/components/workspace/transactions-table';
 import { CompanyAvatar, WorkspaceSelector } from '@/components/workspace/workspace-selector';
 import { Chevron, NavigationIcon } from '@/components/icons/nav-icons';
@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { useToast } from '@/components/ui/toast';
@@ -35,11 +36,22 @@ import {
 import { DEFAULT_PERSONA_ID, findPersona } from '@/lib/personas';
 import { CLIENT_COMPANIES, COMPANIES, type Company, type Scope } from '@/lib/companies';
 import { ScrollEndProvider, useScrollEndBus } from '@/lib/scroll-end';
+import { HEADER_SHADOW, StickyHeaderContext } from '@/lib/sticky-header';
 import { CHIP_CLASS, CHIP_HOVER_STYLE, CHIP_STYLE } from '@/lib/ui-classes';
 import { cn } from '@/lib/utils';
 import { Portal } from '@rn-primitives/portal';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
-import { LifeBuoy, Lock, LogOut, Menu, Settings, UserRound, X } from 'lucide-react-native';
+import {
+  LifeBuoy,
+  Lock,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  UserRound,
+  X,
+} from 'lucide-react-native';
 import * as React from 'react';
 import {
   NativeSyntheticEvent,
@@ -71,6 +83,12 @@ export default function AppShellScreen() {
   const [scope, setScope] = React.useState<Scope>({ kind: 'company', companyId: COMPANIES[0].id });
   const [active, setActive] = React.useState('home');
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  // Desktop sidebar folded down to icons — frees width for the two-panel pages (Reports) on
+  // 1280px laptops.
+  const [navCollapsed, setNavCollapsed] = React.useState(false);
+  // Set by a page with unsaved edits (Reports › Templates) — asked before the shell moves away
+  // to another page or entity, and takes over when it needs to confirm first.
+  const leaveGuardRef = React.useRef<LeaveGuard | null>(null);
   const [period, setPeriod] = React.useState<Period>(DEFAULT_PERIOD);
   // Measured, not a guessed pixel constant — the sticky title row's actual height (it varies by
   // font metrics/breakpoint), so pages with their own sticky headers below it (Work Queue's
@@ -102,17 +120,32 @@ export default function AppShellScreen() {
       toast.show({ ...denial, icon: Lock });
       return;
     }
-    setActive(targetKey);
-    setWorkQueueInitialTab(targetTab);
+    const go = () => {
+      setActive(targetKey);
+      setWorkQueueInitialTab(targetTab);
+    };
+    if (targetKey !== active && leaveGuardRef.current?.(go)) return;
+    go();
+  }
+
+  function changeScope(next: Scope) {
+    const go = () => setScope(next);
+    if (leaveGuardRef.current?.(go)) return;
+    go();
   }
 
   // The shell owns the one page-level ScrollView every page's content sits inside — this bus
   // lets a deep-in-the-tree paginated list (e.g. the Work Queue table) subscribe to "near the
   // bottom" without the shell needing to know what "more" means for whatever page is active.
   const { subscribe, notify } = useScrollEndBus();
+  // Content has scrolled under the sticky header — it casts a shadow (see lib/sticky-header).
+  const [scrolled, setScrolled] = React.useState(false);
+  const [hasTabs, setHasTabs] = React.useState(false);
+  const stickyHeader = React.useMemo(() => ({ scrolled, setHasTabs }), [scrolled]);
   const handleScroll = React.useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      setScrolled(contentOffset.y > 2);
       if (contentSize.height - (contentOffset.y + layoutMeasurement.height) < 600) notify();
     },
     [notify]
@@ -160,7 +193,7 @@ export default function AppShellScreen() {
   const selectorProps = {
     companies: isAcct ? COMPANIES : CLIENT_COMPANIES,
     scope,
-    onScopeChange: setScope,
+    onScopeChange: changeScope,
     allowAllClients: isAcct,
   };
 
@@ -170,8 +203,24 @@ export default function AppShellScreen() {
           the switcher/user menu sit above the content column, both starting at the same y as
           their column. Hidden below the md breakpoint in favor of the mobile top bar. */}
       <View className="hidden flex-row items-center md:flex">
-        <View className="w-[240px] shrink-0">
-          {isAcct ? <Brand /> : <CompanyBrand company={selectedCompany!} />}
+        <View
+          style={{ width: navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_WIDTH }}
+          className={cn(
+            'shrink-0 flex-row items-center',
+            navCollapsed ? 'justify-center' : 'justify-between pr-4'
+          )}>
+          {!navCollapsed && (isAcct ? <Brand /> : <CompanyBrand company={selectedCompany!} />)}
+          <Button
+            variant="ghost"
+            size="icon"
+            onPress={() => setNavCollapsed((c) => !c)}
+            accessibilityLabel={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <Icon
+              as={navCollapsed ? PanelLeftOpen : PanelLeftClose}
+              size={18}
+              className="text-muted-foreground"
+            />
+          </Button>
         </View>
         <View className="flex-1 flex-row items-center justify-between px-8 py-5">
           <View className="flex-row items-center gap-3">
@@ -259,16 +308,22 @@ export default function AppShellScreen() {
           share the same top edge. */}
       <View className="flex-1 flex-row">
         {/* NAV COLUMN — hidden below the md breakpoint; the drawer covers nav on mobile. */}
-        <View className="hidden w-[240px] flex-col md:flex">
+        <View
+          style={{ width: navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_WIDTH }}
+          className="hidden flex-col md:flex">
           <NavList
             nav={mainNav}
             bottomNav={bottomNav}
             active={active}
             onSelect={navigate}
             badges={navBadges}
+            collapsed={navCollapsed}
+            onExpand={() => setNavCollapsed(false)}
           />
-          {DEMO_MODE && <PersonaSwitcher personaId={persona.value} onPersonaChange={setPersona} />}
-          {!isAcct && <PoweredByFooter />}
+          {!navCollapsed && DEMO_MODE && (
+            <PersonaSwitcher personaId={persona.value} onPersonaChange={setPersona} />
+          )}
+          {!navCollapsed && !isAcct && <PoweredByFooter />}
         </View>
 
         {/* CONTENT COLUMN */}
@@ -282,113 +337,124 @@ export default function AppShellScreen() {
             className="flex-1 bg-[#F4F5FA]"
             contentContainerClassName="items-start"
             onScroll={handleScroll}
-            scrollEventThrottle={200}>
-            <ScrollEndProvider subscribe={subscribe}>
-              {/* Sticky, not a static row above the ScrollView — this is what makes the white
+            scrollEventThrottle={32}>
+            <StickyHeaderContext.Provider value={stickyHeader}>
+              <ScrollEndProvider subscribe={subscribe}>
+                {/* Sticky, not a static row above the ScrollView — this is what makes the white
                 card visually scroll in underneath the title as the page scrolls, instead of
                 the title and canvas just being two independent stacked blocks. Opaque bg is
                 required so the card is actually occluded once it scrolls behind this. */}
-              <View
-                onLayout={(e) => setTitleRowHeight(e.nativeEvent.layout.height)}
-                style={{ position: 'sticky', top: 0, zIndex: 10 } as ViewStyle}
-                className="w-full bg-[#F4F5FA]">
-                {/* Same max-w-[1280px] cap as the content wrapper right below, with a matching
+                <View
+                  onLayout={(e) => setTitleRowHeight(e.nativeEvent.layout.height)}
+                  style={[
+                    { position: 'sticky', top: 0, zIndex: 10 } as ViewStyle,
+                    // Pages with tabs carry the shadow on the tabs row, the header's lower edge.
+                    scrolled && !hasTabs && HEADER_SHADOW,
+                  ]}
+                  className="w-full bg-[#F4F5FA] web:transition-shadow">
+                  {/* Same max-w-[1280px] cap as the content wrapper right below, with a matching
                   right inset (md:pr-4 mirrors the wrapper's own md:p-4) — so on wide viewports,
                   where the white card doesn't stretch to the screen edge, this row's right-hand
                   content lines up with the card's actual right edge instead of drifting out to
                   the true viewport edge past it. */}
-                <View className="w-full max-w-[1280px] flex-row items-center justify-between px-6 pb-3 pt-2 md:pb-3 md:pl-8 md:pr-4 md:pt-1">
-                  <Text style={TITLE_STYLE} className={TITLE_CLASS}>
-                    {activeLabel}
-                  </Text>
+                  <View className="w-full max-w-[1280px] flex-row items-center justify-between px-6 pb-3 pt-2 md:pb-3 md:pl-8 md:pr-4 md:pt-1">
+                    <Text style={TITLE_STYLE} className={TITLE_CLASS}>
+                      {activeLabel}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              {/* md:pl-8 (not the symmetric md:p-4 this used to be) so every page's white card
+                {/* md:pl-8 (not the symmetric md:p-4 this used to be) so every page's white card
                 gets its left border at the same 32px inset the title row/tabs already use —
                 fixed once here instead of each page individually nudging its own card over to
                 compensate. Right side unchanged: md:pr-4 already matched the title row's own
                 right inset. */}
-              <View className="w-full max-w-[1280px] p-0 pb-16 md:pb-20 md:pl-8 md:pr-4 md:pt-4">
-                {/* Dashboard gets the shared padded white "foreground" card — everything else
+                <View className="w-full max-w-[1280px] p-0 pb-16 md:pb-20 md:pl-8 md:pr-4 md:pt-4">
+                  {/* Dashboard gets the shared padded white "foreground" card — everything else
                   (nav, header) sits on the gray canvas; this is the one surface that pops
                   forward, giving the page a layered look instead of one flat plane. Mobile
                   drops the card chrome (rounding, border, shadow, outer inset) entirely and
                   just runs the white content flush edge to edge — the floating-card look only
                   reads as intentional when there's enough width to show the gray margin around
                   it; on a phone it was just eating space. */}
-                {active === 'home' && selectedCompany && (
-                  <View className="gap-7 bg-white p-6 md:rounded-3xl md:border md:border-[#E4E4E7] md:p-8 md:shadow-sm md:shadow-black/5">
-                    {!hasDesignedDashboard(persona.value) ? (
-                      <Text className="py-10 text-center text-sm text-[#656565]">
-                        This dashboard is yet to be discussed and designed.
-                      </Text>
-                    ) : (
-                      <>
-                        {/* Keyed by company id so switching companies remounts it (resetting its
+                  {active === 'home' && selectedCompany && (
+                    <View className="gap-7 bg-white p-6 md:rounded-3xl md:border md:border-[#E4E4E7] md:p-8 md:shadow-sm md:shadow-black/5">
+                      {!hasDesignedDashboard(persona.value) ? (
+                        <Text className="py-10 text-center text-sm text-[#656565]">
+                          This dashboard is yet to be discussed and designed.
+                        </Text>
+                      ) : (
+                        <>
+                          {/* Keyed by company id so switching companies remounts it (resetting its
                       dismissed state and picking new random actions) — nothing else about
                       switching companies would otherwise unmount this component. */}
-                        <ActivityBanner
-                          key={selectedCompany.id}
-                          company={selectedCompany}
-                          onNavigate={navigate}
-                        />
-                        <DashboardStats companyId={selectedCompany.id} />
-                        {isAcct && (
-                          <WorkList
-                            role={role}
+                          <ActivityBanner
+                            key={selectedCompany.id}
                             company={selectedCompany}
                             onNavigate={navigate}
-                            showHeading
                           />
-                        )}
-                      </>
-                    )}
-                  </View>
-                )}
-                {/* Work Queue owns its own layout — tabs sit above its white card, not nested
+                          <DashboardStats companyId={selectedCompany.id} />
+                          {isAcct && (
+                            <WorkList
+                              role={role}
+                              company={selectedCompany}
+                              onNavigate={navigate}
+                              showHeading
+                            />
+                          )}
+                        </>
+                      )}
+                    </View>
+                  )}
+                  {/* Work Queue owns its own layout — tabs sit above its white card, not nested
                   inside it, and the card itself gets no padding (the table runs flush) — so it
                   renders directly here rather than sharing Dashboard's padded card wrapper. */}
-                {active === 'work' && selectedCompany && activeNode && (
-                  <WorkQueuePage
-                    company={selectedCompany}
-                    tabs={activeNode.children}
-                    stickyOffset={titleRowHeight}
-                    initialTab={workQueueInitialTab}
-                  />
-                )}
-                {/* Other tabbed destinations (Get Paid, Spend, ...) — the persona's visible tabs
+                  {active === 'work' && selectedCompany && activeNode && (
+                    <WorkQueuePage
+                      company={selectedCompany}
+                      tabs={activeNode.children}
+                      stickyOffset={titleRowHeight}
+                      initialTab={workQueueInitialTab}
+                    />
+                  )}
+                  {/* Other tabbed destinations (Get Paid, Spend, ...) — the persona's visible tabs
                   over a placeholder, since none of these pages have real content yet. Keyed by
                   page so moving between two tabbed pages starts each on its own first tab. */}
-                {active !== 'work' && activeNode?.kind === 'tabs' && (
-                  <TabbedPlaceholderPage
-                    key={active}
-                    tabs={activeNode.children}
-                    stickyOffset={titleRowHeight}
-                    initialTab={workQueueInitialTab}
-                  />
-                )}
-                {/* Placeholder for every other nav destination (Ledger's sub-items, Clients) —
+                  {active !== 'work' && activeNode?.kind === 'tabs' && (
+                    <TabbedPlaceholderPage
+                      key={active}
+                      tabs={activeNode.children}
+                      stickyOffset={titleRowHeight}
+                      initialTab={workQueueInitialTab}
+                    />
+                  )}
+                  {/* Placeholder for every other nav destination (Ledger's sub-items, Clients) —
                   none of these have real content built yet. Without this, landing on one is
                   just a title over empty gray canvas, which reads as "did my click even do
                   anything?" rather than "this page isn't designed yet." */}
-                {active === 'ledger-reports' && (
-                  <ReportsPage
-                    period={period}
-                    stickyOffset={titleRowHeight}
-                    onNavigate={navigate}
-                  />
-                )}
-                {active !== 'home' &&
-                  active !== 'ledger-reports' &&
-                  activeNode?.kind !== 'tabs' && <PlaceholderCard title={activeLabel} />}
-              </View>
-            </ScrollEndProvider>
+                  {active === 'ledger-reports' && selectedCompany && (
+                    <ReportsPage
+                      company={selectedCompany}
+                      period={period}
+                      stickyOffset={titleRowHeight}
+                      onNavigate={navigate}
+                      leaveGuardRef={leaveGuardRef}
+                    />
+                  )}
+                  {active !== 'home' &&
+                    active !== 'ledger-reports' &&
+                    activeNode?.kind !== 'tabs' && <PlaceholderCard title={activeLabel} />}
+                </View>
+              </ScrollEndProvider>
+            </StickyHeaderContext.Provider>
           </ScrollView>
         </View>
       </View>
     </View>
   );
 }
+
+const NAV_WIDTH = 240;
+const NAV_COLLAPSED_WIDTH = 72;
 
 const TITLE_CLASS = 'font-plex-bold tracking-tight text-[#18181B]';
 // 1.8rem — arbitrary-value Tailwind classes (`text-[1.8rem]`) don't compile reliably in this
@@ -459,12 +525,18 @@ function NavList({
   active,
   onSelect,
   badges,
+  collapsed = false,
+  onExpand,
 }: {
   nav: NavNode[];
   bottomNav?: NavNode[];
   active: string;
   onSelect: (key: string) => void;
   badges?: Partial<Record<string, number>>;
+  /** Icons only (desktop sidebar folded). A group's icon unfolds the sidebar to show its
+   * pages, since there's no room to list them. */
+  collapsed?: boolean;
+  onExpand?: () => void;
 }) {
   const allNav = [...nav, ...bottomNav];
   const isGroup = (n: NavNode) => n.kind === 'group';
@@ -507,6 +579,36 @@ function NavList({
     // parent itself isn't a navigable page.
     const isActive =
       item.key === active || (hasSubItems && item.children.some((c) => c.key === active));
+    if (collapsed) {
+      return (
+        <Pressable
+          key={item.key}
+          onPress={() => {
+            if (!hasSubItems) return onSelect(item.key);
+            setExpanded((prev) => new Set(prev).add(item.key));
+            onExpand?.();
+          }}
+          accessibilityRole="link"
+          accessibilityLabel={item.label}
+          className={cn(
+            'items-center justify-center rounded-lg py-3 web:cursor-pointer',
+            isActive ? 'bg-white' : 'web:hover:bg-white'
+          )}>
+          <NavigationIcon
+            name={item.icon}
+            size={18}
+            color={isActive ? '#2D74E4' : '#3F3F46'}
+            filled={isActive}
+          />
+          {!!badges?.[item.key] && (
+            <View
+              style={{ position: 'absolute', top: 8, right: 10, width: 8, height: 8 }}
+              className="rounded-full bg-[#18181B]"
+            />
+          )}
+        </Pressable>
+      );
+    }
     return (
       <React.Fragment key={item.key}>
         <Pressable
@@ -575,10 +677,16 @@ function NavList({
 
   return (
     <>
-      <ScrollView className="flex-1" contentContainerClassName="gap-1 px-4 pb-2">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName={cn('gap-1 pb-2', collapsed ? 'px-3' : 'px-4')}>
         {nav.map(renderItem)}
       </ScrollView>
-      {bottomNav.length > 0 && <View className="gap-1 px-4 pb-2">{bottomNav.map(renderItem)}</View>}
+      {bottomNav.length > 0 && (
+        <View className={cn('gap-1 pb-2', collapsed ? 'px-3' : 'px-4')}>
+          {bottomNav.map(renderItem)}
+        </View>
+      )}
     </>
   );
 }

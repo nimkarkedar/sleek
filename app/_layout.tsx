@@ -15,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'nativewind';
 import * as React from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -37,12 +38,15 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={NAV_THEME[colorScheme ?? 'light']}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <ToastProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-      </ToastProvider>
-      <PortalHost />
-    </ThemeProvider>
+    // Gesture handler needs a root view for gestures anywhere below (drag-to-reorder lists).
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={NAV_THEME[colorScheme ?? 'light']}>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+        <ToastProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </ToastProvider>
+        <PortalHost />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

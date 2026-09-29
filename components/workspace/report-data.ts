@@ -5,6 +5,167 @@
  * credits, and every aged/schedule total matches its row on the Reports overview.
  */
 
+import {
+  ArrowLeftRight,
+  BookOpen,
+  Box,
+  CalendarDays,
+  Clock,
+  CreditCard,
+  Landmark,
+  Scale,
+  Table2,
+  TrendingUp,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react-native';
+
+// ---------------------------------------------------------------------------------------------
+// The 11 reports, in their four sections — the one list All reports, the viewer, templates and
+// client reports all read from.
+// ---------------------------------------------------------------------------------------------
+
+export type Tone = 'success' | 'warning' | 'neutral';
+
+export type ReportMeta = {
+  key: string;
+  name: string;
+  icon: LucideIcon;
+  /** `range` — covers the selected period; `asAt` — a snapshot at its end date. */
+  periodKind: 'range' | 'asAt';
+  figure: string;
+  caption: string;
+  status?: { tone: Tone; label: string };
+};
+
+export type ReportSection = { key: string; label: string; reports: ReportMeta[] };
+
+export const REPORT_SECTIONS: ReportSection[] = [
+  {
+    key: 'financial-statements',
+    label: 'Financial statements',
+    reports: [
+      {
+        key: 'profit-and-loss',
+        name: 'Profit and loss',
+        icon: TrendingUp,
+        periodKind: 'range',
+        figure: 'S$48,210',
+        caption: 'Net profit',
+      },
+      {
+        key: 'balance-sheet',
+        name: 'Balance sheet',
+        icon: Scale,
+        periodKind: 'asAt',
+        figure: 'S$126,258',
+        caption: 'Net assets',
+        status: { tone: 'success', label: 'Balanced' },
+      },
+      {
+        key: 'cash-flow',
+        name: 'Cash flow',
+        icon: ArrowLeftRight,
+        periodKind: 'range',
+        figure: 'S$43,225',
+        caption: 'Net change in cash',
+      },
+    ],
+  },
+  {
+    key: 'ledgers-and-checks',
+    label: 'Ledgers and checks',
+    reports: [
+      {
+        key: 'trial-balance',
+        name: 'Trial balance',
+        icon: Table2,
+        periodKind: 'asAt',
+        figure: 'S$552,945',
+        caption: 'Total debits',
+        status: { tone: 'success', label: 'Balanced' },
+      },
+      {
+        key: 'general-ledger',
+        name: 'General ledger',
+        icon: BookOpen,
+        periodKind: 'range',
+        figure: '1,284',
+        caption: 'Entries in 38 accounts',
+      },
+      {
+        key: 'bank-reconciliation',
+        name: 'Bank reconciliation summary',
+        icon: Landmark,
+        periodKind: 'asAt',
+        figure: '1 of 2',
+        caption: 'Accounts reconciled',
+        status: { tone: 'warning', label: '1 to reconcile' },
+      },
+    ],
+  },
+  {
+    key: 'debtors-and-creditors',
+    label: 'Debtors and creditors',
+    reports: [
+      {
+        key: 'aged-receivables',
+        name: 'Aged receivables',
+        icon: Clock,
+        periodKind: 'asAt',
+        figure: 'S$34,120',
+        caption: 'Outstanding',
+        status: { tone: 'warning', label: '2 customers over 60 days' },
+      },
+      {
+        key: 'aged-payables',
+        name: 'Aged payables',
+        icon: CreditCard,
+        periodKind: 'asAt',
+        figure: 'S$9,845',
+        caption: 'Outstanding',
+        status: { tone: 'neutral', label: '3 open bills' },
+      },
+    ],
+  },
+  {
+    key: 'schedules',
+    label: 'Schedules',
+    reports: [
+      {
+        key: 'prepayments',
+        name: 'Prepayments',
+        icon: CalendarDays,
+        periodKind: 'range',
+        figure: 'S$6,400',
+        caption: 'Closing balance',
+      },
+      {
+        key: 'directors-loan',
+        name: "Director's loan",
+        icon: UserRound,
+        periodKind: 'range',
+        figure: 'S$15,000',
+        caption: 'Owed to director',
+      },
+      {
+        key: 'share-capital',
+        name: 'Share capital',
+        icon: Box,
+        periodKind: 'asAt',
+        figure: 'S$100,000',
+        caption: '100,000 ordinary shares',
+      },
+    ],
+  },
+];
+
+export const ALL_REPORTS: ReportMeta[] = REPORT_SECTIONS.flatMap((s) => s.reports);
+
+export function reportName(key: string): string {
+  return ALL_REPORTS.find((r) => r.key === key)?.name ?? key;
+}
+
 export const ACCOUNTS: Record<string, string> = {
   '090': 'Business account',
   '091': 'Business savings',
@@ -33,8 +194,6 @@ export const ACCOUNTS: Record<string, string> = {
   '970': 'Share capital',
   '980': 'Current year earnings',
 };
-
-export type Tone = 'success' | 'warning' | 'neutral';
 
 /** A table cell: a number (formatted, negatives in brackets), text, a status pill, or `null`
  * for "nothing here" (rendered as a dash). */
